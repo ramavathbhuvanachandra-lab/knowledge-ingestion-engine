@@ -14,22 +14,21 @@ def normalize_url(url: str) -> str:
 
     parts = urlsplit(url)
 
-    # Remove fragment (#section)
-    fragment = ""
-
     # Remove duplicate slashes
     path = re.sub(r"/+", "/", parts.path)
 
-    # Remove trailing slash except root
-    if path.endswith("/") and path != "/":
+    # ⭐ Root path should become empty
+    if path == "/":
+        path = ""
+
+    # Remove trailing slash from non-root paths
+    elif path.endswith("/"):
         path = path[:-1]
 
-    normalized = urlunsplit((
-        parts.scheme,
-        parts.netloc,
+    return urlunsplit((
+        parts.scheme.lower(),
+        parts.netloc.lower(),
         path,
         parts.query,
-        fragment
+        ""
     ))
-
-    return normalized

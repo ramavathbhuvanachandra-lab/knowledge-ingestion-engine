@@ -3,10 +3,20 @@ import json
 
 from models.page import PageData
 
+def save_page(
+    page: PageData,
+    domain: str,
+    category: str,
+    filename: str,
+    ) -> None:
 
-def save_page(page: PageData, domain: str, filename: str):
-
-    output_dir = Path("output") / domain
+    
+    output_dir = (
+    Path("storage")
+    / "output"
+    / domain
+    / category
+    )
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # Save Markdown

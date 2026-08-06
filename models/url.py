@@ -16,4 +16,4 @@ class URLInfo:
     normalized_url: str
     url_type: URLType
     discovered_from: str
-    depth: int
+    depth: int = 0
