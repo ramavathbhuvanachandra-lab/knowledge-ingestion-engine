@@ -1,6 +1,6 @@
 from processors.knowledge_organizer import KnowledgeOrganizer
 from processors.filename_generator import FilenameGenerator
-
+from processors.folder_builder import FolderBuilder
 from storage.saver import save_page
 from utils import get_domain
 
