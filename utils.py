@@ -3,10 +3,50 @@ import re
 
 
 def get_domain(url: str) -> str:
-    parsed = urlparse(url)
-    return parsed.netloc
+    """
+    Return the normalized hostname from a valid URL.
+
+    Example:
+
+        https://www.iitj.ac.in/page
+
+        -> www.iitj.ac.in
+    """
+
+    parsed = urlparse((url or "").strip())
+
+    domain = parsed.hostname
+
+    if not domain:
+        return "unknown-domain"
+
+    return domain.lower().strip()
 
 
 def sanitize_filename(name: str) -> str:
-    name = re.sub(r'[<>:"/\\|?*]', "_", name)
-    return name.strip("_")
+    """
+    Convert arbitrary text into a filesystem-safe filename.
+    """
+
+    name = (name or "").strip()
+
+    if not name:
+        return "page"
+
+    name = name.lower()
+
+    name = re.sub(
+        r"[^a-z0-9]+",
+        "_",
+        name,
+    )
+
+    name = re.sub(
+        r"_+",
+        "_",
+        name,
+    )
+
+    name = name.strip("_")
+
+    return name or "page"
