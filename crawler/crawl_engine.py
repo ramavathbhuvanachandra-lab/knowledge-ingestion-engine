@@ -1,4 +1,5 @@
 from urllib.parse import urlparse
+from crawler.url_classifier import classify_url
 
 from bs4 import BeautifulSoup
 
@@ -6,7 +7,6 @@ from crawler.crawler import crawl_page
 from crawler.crawl_policy import CrawlPolicy
 from crawler.crawl_queue import CrawlQueue
 from crawler.depth_tracker import DepthTracker
-from crawler.url_normalizer import normalize_url
 
 from models.crawl_plan import CrawlAction
 from models.url import URLInfo
@@ -52,6 +52,21 @@ class CrawlEngine:
         self.resources_discovered = 0
         self.ignored_plans = 0
         self.failed_pages = 0
+
+        # One inventory entry per unique document URL.
+        #
+        # {
+        #     "https://example.com/file.pdf": {
+        #         "url": "...",
+        #         "url_type": "pdf",
+        #         "depth": 2,
+        #         "discovered_from": [
+        #             "...",
+        #             "..."
+        #         ]
+        #     }
+        # }
+        self.document_inventory = {}
 
     # ------------------------------------------------------------------
     # NAVIGATION DISCOVERY
@@ -116,8 +131,10 @@ class CrawlEngine:
 
             if normalized_url == source_url:
 
-                depth = self.depth_tracker.register_root(
-                    normalized_url
+                depth = (
+                    self.depth_tracker.register_root(
+                        normalized_url
+                    )
                 )
 
             # ----------------------------------------------------------
@@ -160,12 +177,59 @@ class CrawlEngine:
                 continue
 
             # ----------------------------------------------------------
-            # STATISTICS
+            # DOCUMENT INVENTORY
             # ----------------------------------------------------------
 
             if plan.action == CrawlAction.DOCUMENT:
 
-                self.documents_discovered += 1
+                document_url = plan.url
+
+                if (
+                    document_url
+                    not in self.document_inventory
+                ):
+
+                    self.document_inventory[
+                        document_url
+                    ] = {
+                        "url": document_url,
+                        "url_type": (
+                            plan.url_type.value
+                        ),
+                        "depth": plan.depth,
+                        "discovered_from": [
+                            plan.discovered_from
+                        ],
+                    }
+
+                else:
+
+                    source_pages = (
+                        self.document_inventory[
+                            document_url
+                        ][
+                            "discovered_from"
+                        ]
+                    )
+
+                    if (
+                        plan.discovered_from
+                        not in source_pages
+                    ):
+
+                        source_pages.append(
+                            plan.discovered_from
+                        )
+
+                # Count unique documents,
+                # not every repeated discovery.
+                self.documents_discovered = len(
+                    self.document_inventory
+                )
+
+            # ----------------------------------------------------------
+            # RESOURCE
+            # ----------------------------------------------------------
 
             elif plan.action == CrawlAction.RESOURCE:
 
@@ -189,20 +253,29 @@ class CrawlEngine:
         Crawl and process one WEBPAGE plan.
         """
 
-        print("\n======================================")
+        print(
+            "\n======================================"
+        )
+
         print(
             f"Crawling Page #{self.pages_crawled + 1}"
         )
+
         print(
             f"URL   : {plan.url}"
         )
+
         print(
             f"Depth : {plan.depth}"
         )
+
         print(
             f"Priority : {plan.priority.name}"
         )
-        print("======================================")
+
+        print(
+            "======================================"
+        )
 
         page = await crawl_page(
             plan.url
@@ -249,60 +322,10 @@ class CrawlEngine:
             len(discovered_urls),
         )
 
-        # --------------------------------------------------------------
-        # PLAN + QUEUE
-        # --------------------------------------------------------------
-
         self._create_and_enqueue_plans(
             discovered_urls=discovered_urls,
-            source_url=normalize_url(
-                page.url
-            ),
+            source_url=page.url,
         )
-
-        self.pages_crawled += 1
-
-    # ------------------------------------------------------------------
-    # DOCUMENT / RESOURCE HANDLING
-    # ------------------------------------------------------------------
-
-    async def _handle_non_page_plan(
-        self,
-        plan,
-    ) -> None:
-        """
-        Phase 5 recognizes DOCUMENT and RESOURCE plans.
-
-        Actual document/resource extraction belongs to the next
-        processing phase. We deliberately do not feed PDFs/images
-        into crawl_page().
-        """
-
-        if plan.action == CrawlAction.DOCUMENT:
-
-            print("\n--------------------------------------")
-            print("DOCUMENT PLAN")
-            print("URL   :", plan.url)
-            print("Depth :", plan.depth)
-            print(
-                "Status: discovered, processing deferred"
-            )
-            print("--------------------------------------")
-
-            return
-
-        if plan.action == CrawlAction.RESOURCE:
-
-            print("\n--------------------------------------")
-            print("RESOURCE PLAN")
-            print("URL   :", plan.url)
-            print("Depth :", plan.depth)
-            print(
-                "Status: discovered, processing deferred"
-            )
-            print("--------------------------------------")
-
-            return
 
     # ------------------------------------------------------------------
     # START CRAWL
@@ -311,131 +334,52 @@ class CrawlEngine:
     async def start(
         self,
         start_url: str,
-    ):
+    ) -> None:
         """
         Start crawling from the supplied root URL.
         """
 
-        print(
-            "\n========== Starting Crawl =========="
-        )
-
-        print(
-            "Start URL :",
-            start_url,
+        normalized_start_url = (
+            start_url.strip()
         )
 
         # --------------------------------------------------------------
-        # NORMALIZE ROOT
+        # ROOT URL
         # --------------------------------------------------------------
+        base_domain = urlparse(
+            normalized_start_url
+        ).netloc
 
-        normalized_start = normalize_url(
-            start_url
+        root_url_info = classify_url(
+            normalized_start_url,
+            normalized_start_url,
+            base_domain,
+            normalized_start_url,
         )
 
-        # --------------------------------------------------------------
-        # REGISTER ROOT DEPTH
-        # --------------------------------------------------------------
-
-        self.depth_tracker.register_root(
-            normalized_start
+        root_info = URLInfo(
+            raw_url=normalized_start_url,
+            normalized_url=normalized_start_url,
+            url_type=root_url_info.url_type,
+            discovered_from=normalized_start_url,
+            depth=0,
         )
 
-        self.queue.mark_seen(
-             normalized_start
+        root_plan = self.policy.create_plan(
+            root_info,
+            depth=0,
         )
 
-        # --------------------------------------------------------------
-        # CRAWL HOMEPAGE
-        # --------------------------------------------------------------
 
-        try:
+        if root_plan.action == CrawlAction.IGNORE:
 
-            homepage = await crawl_page(
-                normalized_start
+            self.ignored_plans += 1
+
+        else:
+
+            self.queue.enqueue(
+                root_plan
             )
-
-            if not homepage.success:
-
-                raise RuntimeError(
-                    f"Homepage crawl failed: "
-                    f"{normalized_start}"
-                )
-
-            if not homepage.html:
-
-                raise RuntimeError(
-                    "Homepage returned empty HTML"
-                )
-
-        except Exception as e:
-
-            print(
-                "\nFAILED TO CRAWL ROOT:"
-            )
-
-            print(e)
-
-            return
-
-        print(
-            "\nHomepage crawled successfully"
-        )
-
-        print(
-            "Title :",
-            homepage.title,
-        )
-
-        # --------------------------------------------------------------
-        # PROCESS HOMEPAGE
-        # --------------------------------------------------------------
-
-        try:
-
-            self.processor.process(
-                homepage
-            )
-
-        except Exception as e:
-
-            print(
-                "\nPage processing failed:"
-            )
-
-            print(e)
-
-        # --------------------------------------------------------------
-        # DISCOVER HOMEPAGE NAVIGATION
-        # --------------------------------------------------------------
-
-        discovered_urls = (
-            self._discover_navigation(
-                html=homepage.html,
-                source_url=homepage.url,
-            )
-        )
-
-        print(
-            "\nHomepage URLs discovered :",
-            len(discovered_urls),
-        )
-
-        # --------------------------------------------------------------
-        # CREATE PLANS
-        # --------------------------------------------------------------
-
-        self._create_and_enqueue_plans(
-            discovered_urls=discovered_urls,
-            source_url=normalize_url(
-                homepage.url
-            ),
-        )
-
-        print(
-            "\nInitial CrawlQueue Size :",
-            self.queue.size(),
-        )
 
         # --------------------------------------------------------------
         # CRAWL LOOP
@@ -446,42 +390,7 @@ class CrawlEngine:
             plan = self.queue.dequeue()
 
             if plan is None:
-
                 break
-
-            # ----------------------------------------------------------
-            # DOCUMENT
-            # ----------------------------------------------------------
-
-            if plan.action == CrawlAction.DOCUMENT:
-
-                await self._handle_non_page_plan(
-                    plan
-                )
-
-                continue
-
-            # ----------------------------------------------------------
-            # RESOURCE
-            # ----------------------------------------------------------
-
-            if plan.action == CrawlAction.RESOURCE:
-
-                await self._handle_non_page_plan(
-                    plan
-                )
-
-                continue
-
-            # ----------------------------------------------------------
-            # IGNORE
-            # ----------------------------------------------------------
-
-            if plan.action == CrawlAction.IGNORE:
-
-                self.ignored_plans += 1
-
-                continue
 
             # ----------------------------------------------------------
             # WEBPAGE
@@ -495,27 +404,45 @@ class CrawlEngine:
                         plan
                     )
 
-                except Exception as e:
+                    self.pages_crawled += 1
+
+                except Exception as error:
 
                     self.failed_pages += 1
 
                     print(
-                        "\nFailed :",
+                        "\nPAGE FAILED:",
                         plan.url,
                     )
 
                     print(
-                        "Error :",
-                        e,
+                        f"{type(error).__name__}: "
+                        f"{error}"
                     )
 
-            print(
-                "\nQueue Size :",
-                self.queue.size(),
-            )
+            # ----------------------------------------------------------
+            # DOCUMENT
+            #
+            # Phase 6 will download/process these.
+            # For now they remain discovered inventory items.
+            # ----------------------------------------------------------
+
+            elif plan.action == CrawlAction.DOCUMENT:
+
+                continue
 
             # ----------------------------------------------------------
-            # SAFETY LIMIT
+            # RESOURCE
+            #
+            # Images/resources are intentionally not processed yet.
+            # ----------------------------------------------------------
+
+            elif plan.action == CrawlAction.RESOURCE:
+
+                continue
+
+            # ----------------------------------------------------------
+            # TEST SAFETY LIMIT
             # ----------------------------------------------------------
 
             if self.pages_crawled >= 10:
@@ -580,3 +507,59 @@ class CrawlEngine:
             "Remaining Queue     :",
             self.queue.size(),
         )
+
+        # --------------------------------------------------------------
+        # DOCUMENT INVENTORY
+        # --------------------------------------------------------------
+
+        if self.document_inventory:
+
+            print(
+                "\n---------- DOCUMENT INVENTORY ----------"
+            )
+
+            for index, document in enumerate(
+                self.document_inventory.values(),
+                start=1,
+            ):
+
+                print(
+                    f"\nDocument #{index}"
+                )
+
+                print(
+                    "URL       :",
+                    document["url"],
+                )
+
+                print(
+                    "Type      :",
+                    document["url_type"],
+                )
+
+                print(
+                    "Depth     :",
+                    document["depth"],
+                )
+
+                print(
+                    "Source Pages:",
+                    len(
+                        document[
+                            "discovered_from"
+                        ]
+                    ),
+                )
+
+                for source_page in document[
+                    "discovered_from"
+                ]:
+
+                    print(
+                        "  -",
+                        source_page,
+                    )
+
+            print(
+                "\n----------------------------------------"
+            )

@@ -60,6 +60,57 @@ async def test_engine(url):
     )
 
     # --------------------------------------------------
+    # DOCUMENT INVENTORY
+    # --------------------------------------------------
+
+    print("\nDOCUMENT INVENTORY")
+    print("-" * 100)
+
+    print(
+        "Unique documents:",
+        len(engine.document_inventory),
+    )
+
+    for index, (document_url, document) in enumerate(
+        engine.document_inventory.items(),
+        start=1,
+    ):
+        print(
+            f"\nDocument #{index}"
+        )
+
+        print(
+            "URL:",
+            document_url,
+        )
+
+        print(
+            "Type:",
+            document["url_type"],
+        )
+
+        print(
+            "Depth:",
+            document["depth"],
+        )
+
+        print(
+            "Discovered from:",
+            len(
+                document["discovered_from"]
+            ),
+            "page(s)",
+        )
+
+        for source_page in document[
+            "discovered_from"
+        ]:
+            print(
+                "  -",
+                source_page,
+            )
+
+    # --------------------------------------------------
     # SAFETY / INTEGRATION INVARIANTS
     # --------------------------------------------------
 
@@ -73,12 +124,58 @@ async def test_engine(url):
     )
 
     assert (
-        engine.depth_tracker.size() >=
-        engine.pages_crawled
+        engine.depth_tracker.size()
+        >= engine.pages_crawled
     ), (
         "Tracked URL count is smaller "
         "than pages crawled"
     )
+
+    # --------------------------------------------------
+    # DOCUMENT INVENTORY INVARIANTS
+    # --------------------------------------------------
+
+    assert (
+        engine.documents_discovered
+        == len(engine.document_inventory)
+    ), (
+        "documents_discovered does not match "
+        "unique document inventory size"
+    )
+
+    for document_url, document in (
+        engine.document_inventory.items()
+    ):
+
+        assert document_url, (
+            "Document URL is empty"
+        )
+
+        assert document["url"] == document_url, (
+            "Inventory URL mismatch"
+        )
+
+        assert document["url_type"] == "pdf", (
+            f"Unexpected document type: "
+            f"{document['url_type']}"
+        )
+
+        assert document["discovered_from"], (
+            f"No source page recorded for: "
+            f"{document_url}"
+        )
+
+        # Every source page should be unique.
+        assert len(
+            document["discovered_from"]
+        ) == len(
+            set(
+                document["discovered_from"]
+            )
+        ), (
+            f"Duplicate source pages found "
+            f"for document: {document_url}"
+        )
 
     print(
         "\nPASS:",
@@ -100,7 +197,10 @@ async def main():
 
         except Exception as error:
 
-            print("\nFAILED:", url)
+            print(
+                "\nFAILED:",
+                url,
+            )
 
             print(
                 f"{type(error).__name__}: "
@@ -118,7 +218,10 @@ async def main():
 
     print("=" * 100)
 
-    assert passed == len(TEST_URLS)
+    assert passed == len(TEST_URLS), (
+        "One or more real crawl engine "
+        "tests failed"
+    )
 
     print(
         "\nREAL CRAWL ENGINE INTEGRATION: PASS"
