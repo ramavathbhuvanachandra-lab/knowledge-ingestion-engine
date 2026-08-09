@@ -1,4 +1,4 @@
-from url_validator import is_valid_url
+from crawler.url_validator import is_valid_url
 
 
 urls = [
@@ -24,4 +24,8 @@ urls = [
 
 for url in urls:
 
-    print(url, "->", is_valid_url(url))
+    print(
+        url,
+        "->",
+        is_valid_url(url),
+    )
