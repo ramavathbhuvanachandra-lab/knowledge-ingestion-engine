@@ -1,29 +1,47 @@
 from processors.knowledge_organizer import KnowledgeOrganizer
 from processors.filename_generator import FilenameGenerator
-from processors.folder_builder import FolderBuilder
 from storage.saver import save_page
 from utils import get_domain
 
 
 class PageProcessor:
+    """
+    Converts crawled PageData into organized knowledge files.
+    """
 
-    def __init__(self):
+    def __init__(
+        self,
+        base_path="storage/output",
+    ):
         self.organizer = KnowledgeOrganizer()
         self.filename_generator = FilenameGenerator()
+        self.base_path = base_path
 
     def process(self, page):
+        """
+        Process and persist a crawled page.
+        """
 
-        domain = get_domain(page.url)
+        domain = get_domain(
+            page.url
+        )
 
-        # Organizer decides WHERE to save
-        category, _ = self.organizer.get_save_location(page)
+        category, _ = (
+            self.organizer.get_save_location(
+                page
+            )
+        )
 
-        # FilenameGenerator decides WHAT to call the file
-        filename = self.filename_generator.generate(page)
+        filename = (
+            self.filename_generator.generate(
+                page
+            )
+        )
 
-        save_page(
+        return save_page(
             page=page,
             domain=domain,
             category=category,
-            filename=filename
+            filename=filename,
+            base_path=self.base_path,
         )
