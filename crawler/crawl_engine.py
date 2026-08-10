@@ -9,13 +9,14 @@ from crawler.depth_tracker import DepthTracker
 from crawler.url_classifier import classify_url
 
 from models.crawl_plan import CrawlAction
-from models.url import URLInfo
+from models.url import URLInfo, URLType
 
 from pipeline.navigation_pipeline import NavigationPipeline
 
 from processors.page_processor import PageProcessor
 from processors.document_downloader import DocumentDownloader
 from processors.pdf_processor import PDFProcessor
+from processors.xlsx_processor import XLSXProcessor
 from processors.document_integrator import DocumentIntegrator
 
 from url_discovery import URLDiscovery
@@ -49,9 +50,20 @@ class CrawlEngine:
           ↓
         DocumentDownloader
           ↓
-        PDFProcessor
+        PDFProcessor / XLSXProcessor
           ↓
         Processed Markdown + Metadata
+          ↓
+        DocumentIntegrator
+
+    Important:
+
+    - Webpage crawling remains unchanged.
+    - PDF processing remains unchanged.
+    - XLSX processing is added as another document type.
+    - Chunking is NOT performed here.
+    - Embedding is NOT performed here.
+    - Retrieval is NOT performed here.
     """
 
     def __init__(self):
@@ -63,11 +75,12 @@ class CrawlEngine:
         self.processor = PageProcessor()
 
         # ----------------------------------------------------------
-        # PHASE 6
+        # PHASE 6 — DOCUMENT PROCESSORS
         # ----------------------------------------------------------
 
         self.document_downloader = DocumentDownloader()
         self.pdf_processor = PDFProcessor()
+        self.xlsx_processor = XLSXProcessor()
         self.document_integrator = DocumentIntegrator()
 
         # ----------------------------------------------------------
@@ -288,11 +301,11 @@ class CrawlEngine:
         )
 
         print(
-            f"URL   : {plan.url}"
+            f"URL      : {plan.url}"
         )
 
         print(
-            f"Depth : {plan.depth}"
+            f"Depth    : {plan.depth}"
         )
 
         print(
@@ -362,7 +375,7 @@ class CrawlEngine:
         plan,
     ) -> None:
         """
-        Download and process one discovered PDF document.
+        Download and process one discovered document.
 
         Phase 6 flow:
 
@@ -370,7 +383,11 @@ class CrawlEngine:
                 ↓
             DocumentDownloader
                 ↓
-            PDFProcessor
+            PDFProcessor / XLSXProcessor
+                ↓
+            Markdown + Metadata
+                ↓
+            DocumentIntegrator
         """
 
         print(
@@ -384,6 +401,11 @@ class CrawlEngine:
         print(
             "URL      :",
             plan.url,
+        )
+
+        print(
+            "Type     :",
+            plan.url_type.value,
         )
 
         print(
@@ -404,48 +426,94 @@ class CrawlEngine:
         # DOWNLOAD
         # --------------------------------------------------------------
 
-        pdf_path = (
+        document_path = (
             self.document_downloader.download(
                 url=plan.url,
             )
         )
 
+        print(
+            "Downloaded:",
+            document_path,
+        )
+
         # --------------------------------------------------------------
-        # PROCESS PDF
+        # PROCESS ACCORDING TO DOCUMENT TYPE
         # --------------------------------------------------------------
 
-        result = (
-            self.pdf_processor.process(
-                pdf_path,
-                source_url=plan.url,
+        if plan.url_type == URLType.PDF:
+
+            print(
+                "Processor  : PDFProcessor"
             )
-        )
+
+            markdown_path = (
+                self.pdf_processor.process(
+                    document_path,
+                    source_url=plan.url,
+                )
+            )
+
+        elif plan.url_type == URLType.XLSX:
+
+            print(
+                "Processor  : XLSXProcessor"
+            )
+
+            markdown_path = (
+                self.xlsx_processor.process(
+                    document_path,
+                    source_url=plan.url,
+                )
+            )
+
+        else:
+
+            raise ValueError(
+                "Unsupported document type: "
+                f"{plan.url_type.value}"
+            )
 
         print(
-            "Processed PDF:",
-            pdf_path,
+            "Processed Markdown:",
+            markdown_path,
         )
 
         # --------------------------------------------------------------
-        # PHASE 6.7 — INTEGRATE INTO MAIN STORAGE
+        # METADATA
         # --------------------------------------------------------------
-
-        markdown_path = result
 
         metadata_path = (
             markdown_path.with_suffix(".json")
         )
 
+        # --------------------------------------------------------------
+        # DOMAIN
+        # --------------------------------------------------------------
+
         domain = urlparse(
             plan.url
         ).netloc
 
-        integrated_markdown, integrated_metadata = (
+        # --------------------------------------------------------------
+        # CATEGORY
+        # --------------------------------------------------------------
+
+        category = plan.url_type.value
+
+        # --------------------------------------------------------------
+        # PHASE 6.7 — INTEGRATE INTO MAIN STORAGE
+        # --------------------------------------------------------------
+
+        (
+            integrated_markdown,
+            integrated_metadata,
+        ) = (
             self.document_integrator.integrate(
                 markdown_path=markdown_path,
                 metadata_path=metadata_path,
                 domain=domain,
-                category="others",
+                category=category,
             )
         )
 
@@ -474,6 +542,7 @@ class CrawlEngine:
         max_pages limits WEBPAGE crawling.
 
         Important:
+
         DOCUMENT plans already discovered in the queue
         are still processed after the page limit is reached.
         """
@@ -482,13 +551,30 @@ class CrawlEngine:
             start_url.strip()
         )
 
+        if not normalized_start_url:
+
+            raise ValueError(
+                "Start URL cannot be empty"
+            )
+
         # --------------------------------------------------------------
-        # ROOT URL
+        # ROOT DOMAIN
         # --------------------------------------------------------------
 
         base_domain = urlparse(
             normalized_start_url
         ).netloc
+
+        if not base_domain:
+
+            raise ValueError(
+                f"Invalid start URL: "
+                f"{normalized_start_url}"
+            )
+
+        # --------------------------------------------------------------
+        # ROOT URL
+        # --------------------------------------------------------------
 
         root_url_info = classify_url(
             normalized_start_url,
@@ -708,4 +794,4 @@ class CrawlEngine:
 
             print(
                 "\n----------------------------------------"
-            )                                                         
+            )

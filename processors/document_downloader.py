@@ -10,18 +10,20 @@ class DocumentDownloader:
     """
     Downloads external documents discovered during crawling.
 
-    Phase 6.2:
-        - Download PDF documents.
-        - Validate HTTP response.
-        - Validate PDF content.
-        - Store raw PDF locally.
+    Responsibilities:
+    - Download supported documents.
+    - Validate HTTP response.
+    - Validate basic file content.
+    - Store raw documents locally.
+    - Store metadata beside the raw document.
 
-    Phase 6.3:
-        - Store metadata beside the raw PDF.
-
-    PDF extraction and processing are intentionally
-    NOT handled here.
+    Document processing is handled separately.
     """
+
+    SUPPORTED_TYPES = {
+        ".pdf": "pdf",
+        ".xlsx": "xlsx",
+    }
 
     def __init__(
         self,
@@ -40,9 +42,6 @@ class DocumentDownloader:
         url: str,
         domain: str | None = None,
     ) -> Path:
-        """
-        Download a PDF and return its local path.
-        """
 
         url = (url or "").strip()
 
@@ -65,6 +64,14 @@ class DocumentDownloader:
             raise ValueError(
                 f"Invalid document URL: {url}"
             )
+
+        # --------------------------------------------------------
+        # DOCUMENT TYPE
+        # --------------------------------------------------------
+
+        document_type = self._detect_document_type(
+            url
+        )
 
         # --------------------------------------------------------
         # DOMAIN
@@ -112,10 +119,6 @@ class DocumentDownloader:
 
         response.raise_for_status()
 
-        # --------------------------------------------------------
-        # VALIDATE CONTENT
-        # --------------------------------------------------------
-
         content = response.content
 
         if not content:
@@ -123,15 +126,30 @@ class DocumentDownloader:
                 f"Downloaded document is empty: {url}"
             )
 
-        if not self._looks_like_pdf(
-            content
-        ):
-            raise ValueError(
-                f"Downloaded content is not a valid PDF: {url}"
-            )
+        # --------------------------------------------------------
+        # VALIDATE CONTENT
+        # --------------------------------------------------------
+
+        if document_type == "pdf":
+
+            if not self._looks_like_pdf(
+                content
+            ):
+                raise ValueError(
+                    f"Downloaded content is not a valid PDF: {url}"
+                )
+
+        elif document_type == "xlsx":
+
+            if not self._looks_like_xlsx(
+                content
+            ):
+                raise ValueError(
+                    f"Downloaded content is not a valid XLSX: {url}"
+                )
 
         # --------------------------------------------------------
-        # SAVE RAW PDF
+        # SAVE RAW DOCUMENT
         # --------------------------------------------------------
 
         output_path.write_bytes(
@@ -146,7 +164,7 @@ class DocumentDownloader:
             "source_url": url,
             "local_file": str(output_path),
             "domain": domain,
-            "document_type": "pdf",
+            "document_type": document_type,
             "size_bytes": len(content),
             "success": True,
         }
@@ -181,10 +199,43 @@ class DocumentDownloader:
         )
 
         print(
+            f"Document Type       : {document_type}"
+        )
+
+        print(
             f"Size                : {len(content)} bytes"
         )
 
         return output_path
+
+    # ------------------------------------------------------------
+    # DOCUMENT TYPE
+    # ------------------------------------------------------------
+
+    def _detect_document_type(
+        self,
+        url: str,
+    ) -> str:
+
+        parsed = urlparse(url)
+
+        suffix = Path(
+            parsed.path
+        ).suffix.lower()
+
+        document_type = (
+            self.SUPPORTED_TYPES.get(
+                suffix
+            )
+        )
+
+        if document_type is None:
+
+            raise ValueError(
+                f"Unsupported document type: {url}"
+            )
+
+        return document_type
 
     # ------------------------------------------------------------
     # FILENAME
@@ -194,9 +245,6 @@ class DocumentDownloader:
         self,
         url: str,
     ) -> str:
-        """
-        Build a safe filename from the URL.
-        """
 
         parsed = urlparse(url)
 
@@ -205,7 +253,7 @@ class DocumentDownloader:
         ).name
 
         if not raw_name:
-            raw_name = "document.pdf"
+            raw_name = "document"
 
         raw_name = raw_name.lower()
 
@@ -221,9 +269,6 @@ class DocumentDownloader:
             raw_name,
         )
 
-        if not raw_name.endswith(".pdf"):
-            raw_name += ".pdf"
-
         return raw_name
 
     # ------------------------------------------------------------
@@ -234,20 +279,27 @@ class DocumentDownloader:
         self,
         content: bytes,
     ) -> bool:
-        """
-        Check the PDF magic header.
-
-        Real PDF files normally begin with:
-
-            %PDF-
-        """
 
         return content.startswith(
             b"%PDF-"
         )
 
     # ------------------------------------------------------------
-    # SAFE PATH COMPONENT
+    # XLSX VALIDATION
+    # ------------------------------------------------------------
+
+    def _looks_like_xlsx(
+        self,
+        content: bytes,
+    ) -> bool:
+
+        # XLSX files are ZIP containers.
+        return content.startswith(
+            b"PK"
+        )
+
+    # ------------------------------------------------------------
+    # SAFE COMPONENT
     # ------------------------------------------------------------
 
     def _clean_component(
@@ -255,20 +307,35 @@ class DocumentDownloader:
         value: str,
     ) -> str:
 
-        value = value.lower()
+        value = (
+            value or ""
+        ).strip().lower()
 
-        value = re.sub(
-            r"[^a-z0-9._-]+",
-            "_",
-            value,
+        cleaned = []
+
+        for character in value:
+
+            if (
+                character.isalnum()
+                or character in "._-"
+            ):
+                cleaned.append(
+                    character
+                )
+            else:
+                cleaned.append("_")
+
+        result = "".join(
+            cleaned
         )
 
-        value = re.sub(
-            r"_+",
-            "_",
-            value,
-        )
+        while "__" in result:
+            result = result.replace(
+                "__",
+                "_",
+            )
 
-        return value.strip(
-            "._-"
-        ) or "unknown"
+        return (
+            result.strip("._-")
+            or "unknown"
+        )

@@ -15,6 +15,7 @@ TEST_DOCUMENTS = [
             "institute-sustainability-committee-638779148376488067.pdf"
         ),
         "domain": "www.iitj.ac.in",
+        "document_type": "pdf",
     },
     {
         "url": (
@@ -22,6 +23,15 @@ TEST_DOCUMENTS = [
             "uploads/Newsletter-Apr-26-Issue.pdf"
         ),
         "domain": "home.iitd.ac.in",
+        "document_type": "pdf",
+    },
+    {
+        "url": (
+            "https://gwpgc.ac.in/DynImg/files/"
+            "5_2_1_1%20Student%20Progression%20Report.xlsx"
+        ),
+        "domain": "gwpgc.ac.in",
+        "document_type": "xlsx",
     },
 ]
 
@@ -31,18 +41,40 @@ TEST_OUTPUT = Path(
 )
 
 
+# ============================================================
+# TEST ONE DOCUMENT
+# ============================================================
+
 def test_document(
     downloader: DocumentDownloader,
     document: dict,
-):
+) -> None:
+
+    print(
+        "\n" + "=" * 90
+    )
+
+    print(
+        "TESTING DOCUMENT"
+    )
+
+    print(
+        "=" * 90
+    )
+
     url = document["url"]
     domain = document["domain"]
+    expected_type = document["document_type"]
 
-    print("\n" + "=" * 90)
-    print("TESTING DOCUMENT")
-    print("=" * 90)
+    print(
+        "URL :",
+        url,
+    )
 
-    print("URL:", url)
+    print(
+        "Expected Type :",
+        expected_type,
+    )
 
     # --------------------------------------------------------
     # DOWNLOAD
@@ -54,19 +86,26 @@ def test_document(
     )
 
     # --------------------------------------------------------
-    # PDF PATH
+    # OUTPUT FILE
     # --------------------------------------------------------
 
     assert output_path.exists(), (
-        f"PDF was not created: {output_path}"
+        f"Document was not created: {output_path}"
     )
 
     assert output_path.is_file(), (
         f"Output is not a file: {output_path}"
     )
 
-    assert output_path.suffix == ".pdf", (
-        f"Expected PDF file: {output_path}"
+    # --------------------------------------------------------
+    # FILE EXTENSION
+    # --------------------------------------------------------
+
+    assert output_path.suffix.lower() == (
+        f".{expected_type}"
+    ), (
+        f"Expected .{expected_type} file: "
+        f"{output_path}"
     )
 
     # --------------------------------------------------------
@@ -82,6 +121,11 @@ def test_document(
         f"{expected_domain_dir}"
     )
 
+    assert expected_domain_dir.is_dir(), (
+        f"Domain path is not a directory: "
+        f"{expected_domain_dir}"
+    )
+
     # --------------------------------------------------------
     # FILE SIZE
     # --------------------------------------------------------
@@ -89,19 +133,37 @@ def test_document(
     size = output_path.stat().st_size
 
     assert size > 0, (
-        f"Downloaded file is empty: {output_path}"
+        f"Downloaded file is empty: "
+        f"{output_path}"
     )
 
     # --------------------------------------------------------
-    # PDF MAGIC HEADER
+    # CONTENT VALIDATION
     # --------------------------------------------------------
 
     header = output_path.read_bytes()[:5]
 
-    assert header == b"%PDF-", (
-        f"File does not contain a PDF header: "
-        f"{output_path}"
-    )
+    if expected_type == "pdf":
+
+        assert header == b"%PDF-", (
+            f"File does not contain a valid PDF "
+            f"header: {output_path}"
+        )
+
+    elif expected_type == "xlsx":
+
+        # XLSX is a ZIP-based Office document.
+        assert header[:2] == b"PK", (
+            f"File does not contain a valid XLSX "
+            f"ZIP header: {output_path}"
+        )
+
+    else:
+
+        raise AssertionError(
+            f"Unsupported test document type: "
+            f"{expected_type}"
+        )
 
     # --------------------------------------------------------
     # METADATA
@@ -112,11 +174,13 @@ def test_document(
     )
 
     assert metadata_path.exists(), (
-        f"Metadata file missing: {metadata_path}"
+        f"Metadata file missing: "
+        f"{metadata_path}"
     )
 
     assert metadata_path.is_file(), (
-        f"Metadata path is not a file: {metadata_path}"
+        f"Metadata path is not a file: "
+        f"{metadata_path}"
     )
 
     metadata = json.loads(
@@ -133,7 +197,9 @@ def test_document(
 
     assert metadata["domain"] == domain
 
-    assert metadata["document_type"] == "pdf"
+    assert metadata["document_type"] == (
+        expected_type
+    )
 
     assert metadata["success"] is True
 
@@ -147,26 +213,41 @@ def test_document(
     # RESULT
     # --------------------------------------------------------
 
-    print("PDF     :", output_path)
+    print(
+        "Document :",
+        output_path,
+    )
 
     print(
-        "Metadata:",
+        "Metadata :",
         metadata_path,
     )
 
     print(
-        "Size    :",
+        "Type     :",
+        expected_type,
+    )
+
+    print(
+        "Size     :",
         size,
         "bytes",
     )
 
     print(
-        "Header  :",
+        "Header   :",
         header,
     )
 
-    print("PASS:", url)
+    print(
+        "PASS:",
+        url,
+    )
 
+
+# ============================================================
+# MAIN
+# ============================================================
 
 def main():
 
@@ -175,6 +256,7 @@ def main():
     # --------------------------------------------------------
 
     if TEST_OUTPUT.exists():
+
         shutil.rmtree(
             TEST_OUTPUT
         )
@@ -183,6 +265,10 @@ def main():
         parents=True,
         exist_ok=True,
     )
+
+    # --------------------------------------------------------
+    # CREATE DOWNLOADER
+    # --------------------------------------------------------
 
     downloader = DocumentDownloader(
         base_path=TEST_OUTPUT

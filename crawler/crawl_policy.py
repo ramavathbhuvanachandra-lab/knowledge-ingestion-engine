@@ -66,7 +66,14 @@ class CrawlPolicy:
                 CrawlPriority.LOW,
             )
 
-        if url_info.url_type == URLType.PDF:
+        # ------------------------------------------------------
+        # DOCUMENTS
+        # ------------------------------------------------------
+
+        if url_info.url_type in (
+            URLType.PDF,
+            URLType.XLSX,
+        ):
 
             if self.process_documents:
 

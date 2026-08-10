@@ -36,6 +36,9 @@ def classify_url(
     elif normalized_url.lower().endswith(".pdf"):
         url_type = URLType.PDF
 
+    elif normalized_url.lower().endswith(".xlsx"):
+        url_type = URLType.XLSX
+
     # Image
     elif normalized_url.lower().endswith(IMAGE_EXTENSIONS):
         url_type = URLType.IMAGE

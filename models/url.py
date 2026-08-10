@@ -5,10 +5,10 @@ from enum import Enum
 class URLType(Enum):
     WEBPAGE = "webpage"
     PDF = "pdf"
+    XLSX = "xlsx"
     IMAGE = "image"
     EXTERNAL = "external"
     INVALID = "invalid"
-
 
 @dataclass
 class URLInfo:
