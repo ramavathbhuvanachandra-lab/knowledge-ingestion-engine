@@ -1,5 +1,4 @@
 from urllib.parse import urlparse
-from crawler.url_classifier import classify_url
 
 from bs4 import BeautifulSoup
 
@@ -7,12 +6,16 @@ from crawler.crawler import crawl_page
 from crawler.crawl_policy import CrawlPolicy
 from crawler.crawl_queue import CrawlQueue
 from crawler.depth_tracker import DepthTracker
+from crawler.url_classifier import classify_url
 
 from models.crawl_plan import CrawlAction
 from models.url import URLInfo
 
 from pipeline.navigation_pipeline import NavigationPipeline
+
 from processors.page_processor import PageProcessor
+from processors.document_downloader import DocumentDownloader
+from processors.pdf_processor import PDFProcessor
 
 from url_discovery import URLDiscovery
 
@@ -38,6 +41,16 @@ class CrawlEngine:
         CrawlQueue
           ↓
         Execute plan
+
+    Phase 6 document flow:
+
+        DOCUMENT plan
+          ↓
+        DocumentDownloader
+          ↓
+        PDFProcessor
+          ↓
+        Processed Markdown + Metadata
     """
 
     def __init__(self):
@@ -45,7 +58,19 @@ class CrawlEngine:
         self.depth_tracker = DepthTracker()
         self.policy = CrawlPolicy()
         self.discovery = URLDiscovery()
+
         self.processor = PageProcessor()
+
+        # ----------------------------------------------------------
+        # PHASE 6
+        # ----------------------------------------------------------
+
+        self.document_downloader = DocumentDownloader()
+        self.pdf_processor = PDFProcessor()
+
+        # ----------------------------------------------------------
+        # STATISTICS
+        # ----------------------------------------------------------
 
         self.pages_crawled = 0
         self.documents_discovered = 0
@@ -53,19 +78,12 @@ class CrawlEngine:
         self.ignored_plans = 0
         self.failed_pages = 0
 
-        # One inventory entry per unique document URL.
+        # ----------------------------------------------------------
+        # DOCUMENT INVENTORY
         #
-        # {
-        #     "https://example.com/file.pdf": {
-        #         "url": "...",
-        #         "url_type": "pdf",
-        #         "depth": 2,
-        #         "discovered_from": [
-        #             "...",
-        #             "..."
-        #         ]
-        #     }
-        # }
+        # One inventory entry per unique document URL.
+        # ----------------------------------------------------------
+
         self.document_inventory = {}
 
     # ------------------------------------------------------------------
@@ -150,8 +168,9 @@ class CrawlEngine:
                     )
                 )
 
-            # URLDiscovery intentionally leaves depth at 0.
-            # Create a new URLInfo carrying the actual crawl depth.
+            # ----------------------------------------------------------
+            # CREATE URL INFO WITH DEPTH
+            # ----------------------------------------------------------
 
             planned_url_info = URLInfo(
                 raw_url=url_info.raw_url,
@@ -160,6 +179,10 @@ class CrawlEngine:
                 discovered_from=url_info.discovered_from,
                 depth=depth,
             )
+
+            # ----------------------------------------------------------
+            # CREATE PLAN
+            # ----------------------------------------------------------
 
             plan = self.policy.create_plan(
                 planned_url_info,
@@ -221,10 +244,11 @@ class CrawlEngine:
                             plan.discovered_from
                         )
 
-                # Count unique documents,
-                # not every repeated discovery.
-                self.documents_discovered = len(
-                    self.document_inventory
+                # Count unique documents.
+                self.documents_discovered = (
+                    len(
+                        self.document_inventory
+                    )
                 )
 
             # ----------------------------------------------------------
@@ -328,15 +352,126 @@ class CrawlEngine:
         )
 
     # ------------------------------------------------------------------
+    # PROCESS ONE DOCUMENT
+    # ------------------------------------------------------------------
+
+    async def _process_document(
+        self,
+        plan,
+    ) -> None:
+        """
+        Download and process one discovered PDF document.
+
+        Phase 6 flow:
+
+            DOCUMENT plan
+                ↓
+            DocumentDownloader
+                ↓
+            PDFProcessor
+        """
+
+        print(
+            "\n======================================"
+        )
+
+        print(
+            "Processing Document"
+        )
+
+        print(
+            "URL      :",
+            plan.url,
+        )
+
+        print(
+            "Depth    :",
+            plan.depth,
+        )
+
+        print(
+            "Priority :",
+            plan.priority.name,
+        )
+
+        print(
+            "======================================"
+        )
+
+        # --------------------------------------------------------------
+        # DOWNLOAD
+        # --------------------------------------------------------------
+
+        pdf_path = (
+            self.document_downloader.download(
+                url=plan.url,
+            )
+        )
+
+        # --------------------------------------------------------------
+        # PROCESS PDF
+        # --------------------------------------------------------------
+
+        result = (
+            self.pdf_processor.process(
+                pdf_path,
+                source_url=plan.url,
+            )
+        )
+
+        print(
+            "Processed PDF:",
+            pdf_path,
+        )
+
+        # --------------------------------------------------------------
+        # PROCESSING RESULT
+        # --------------------------------------------------------------
+
+        if isinstance(result, dict):
+
+            if "pages" in result:
+
+                print(
+                    "Pages:",
+                    result["pages"],
+                )
+
+            if "pages_with_text" in result:
+
+                print(
+                    "Pages with text:",
+                    result[
+                        "pages_with_text"
+                    ],
+                )
+
+            if "text_length" in result:
+
+                print(
+                    "Text length:",
+                    result[
+                        "text_length"
+                    ],
+                )
+
+    # ------------------------------------------------------------------
     # START CRAWL
     # ------------------------------------------------------------------
 
     async def start(
         self,
         start_url: str,
+        max_pages: int | None = 50,
     ) -> None:
         """
         Start crawling from the supplied root URL.
+
+        max_pages limits WEBPAGE crawling.
+
+        Important:
+        DOCUMENT plans already discovered in the queue
+        are still processed after the page limit is reached.
         """
 
         normalized_start_url = (
@@ -346,6 +481,7 @@ class CrawlEngine:
         # --------------------------------------------------------------
         # ROOT URL
         # --------------------------------------------------------------
+
         base_domain = urlparse(
             normalized_start_url
         ).netloc
@@ -370,8 +506,10 @@ class CrawlEngine:
             depth=0,
         )
 
-
-        if root_plan.action == CrawlAction.IGNORE:
+        if (
+            root_plan.action
+            == CrawlAction.IGNORE
+        ):
 
             self.ignored_plans += 1
 
@@ -398,6 +536,22 @@ class CrawlEngine:
 
             if plan.action == CrawlAction.CRAWL:
 
+                # ------------------------------------------------------
+                # PAGE LIMIT
+                #
+                # Do NOT break the entire queue.
+                #
+                # Skip additional WEBPAGE plans only.
+                # DOCUMENT plans must still be processed.
+                # ------------------------------------------------------
+
+                if (
+                    max_pages is not None
+                    and self.pages_crawled >= max_pages
+                ):
+
+                    continue
+
                 try:
 
                     await self._process_page(
@@ -422,48 +576,36 @@ class CrawlEngine:
 
             # ----------------------------------------------------------
             # DOCUMENT
-            #
-            # Phase 6 will download/process these.
-            # For now they remain discovered inventory items.
             # ----------------------------------------------------------
 
             elif plan.action == CrawlAction.DOCUMENT:
 
-                continue
+                try:
+
+                    await self._process_document(
+                        plan
+                    )
+
+                except Exception as error:
+
+                    print(
+                        "\nDOCUMENT FAILED:",
+                        plan.url,
+                    )
+
+                    print(
+                        f"{type(error).__name__}: "
+                        f"{error}"
+                    )
 
             # ----------------------------------------------------------
             # RESOURCE
-            #
-            # Images/resources are intentionally not processed yet.
             # ----------------------------------------------------------
 
             elif plan.action == CrawlAction.RESOURCE:
 
+                # Images/resources remain intentionally ignored.
                 continue
-
-            # ----------------------------------------------------------
-            # TEST SAFETY LIMIT
-            # ----------------------------------------------------------
-
-            if self.pages_crawled >= 10:
-
-                print(
-                    "\n======================================"
-                )
-
-                print(
-                    "Reached Test Limit (10 Pages)"
-                )
-
-                print(
-                    "Stopping Crawl..."
-                )
-
-                print(
-                    "======================================"
-                )
-
-                break
 
         # --------------------------------------------------------------
         # FINAL STATISTICS
