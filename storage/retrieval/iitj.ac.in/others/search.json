@@ -1,0 +1,52 @@
+{
+    "document": {
+        "title": "Search | Indian Institute of Technology Jodhpur | IIT Jodhpur",
+        "url": "https://iitj.ac.in/Search",
+        "domain": "iitj.ac.in",
+        "category": "others",
+        "document_type": "webpage"
+    },
+    "retrieval": {
+        "record_count": 2,
+        "embedding_ready": false,
+        "vector_store_ready": false
+    },
+    "records": [
+        {
+            "record_id": "iitj.ac.in_search_0001",
+            "text": "IIT Jodhpur Home Page []( A+ A A- हिन्दी | Sitemap\n* Home\n* About IITJ;)\n* Institute\n* Statutory Bodies\n* Key Functionaries\n* Infrastructure\n* Outreach\n* Administration;)\n* Office of Director\n* Office of Deputy Director\n* Office of Registrar\n* Office of Administration\n* Various Offices\n* Administrative Contact\n* Academics;)\n* Departments\n* Schools\n* Centers\n* IDRPs/IDRCs\n* Office of Academics Affairs\n* Office of Executive Education\n* Engineering Science\n* Admissions;)\n* Programs\n* Admission to Postgraduate Programs\n* Admission Links\n* Resources;)\n* Central Library\n* Digital Infrastructure & Automation\n* Primary Health Center\n* Research;)\n* AIOT Fab Facility\n* CRF Facility\n* Office Of Research & Development\n* Company Oversight\n* Students;)\n* Office of Students\n* Student Wellbeing Committee\n* Placements, Training & Internships\n* Alumni\n* Faculty;)\n* Faculty Positions\n* FAQs: Applicants\n* Faculty Members\n* Scholars-in-Residence\n* Adjunct Faculty Members\n* Visiting Faculty Members\n* Why Pursue a Career @ IIT Jodhpur\nIIT Jodhpur Indian Institute of Technology Jodhpur",
+            "metadata": {
+                "source_url": "https://iitj.ac.in/Search",
+                "domain": "iitj.ac.in",
+                "category": "others",
+                "document_type": "webpage",
+                "source_document": "search.json",
+                "page_number": null,
+                "section": null,
+                "title": "Search | Indian Institute of Technology Jodhpur | IIT Jodhpur"
+            },
+            "retrieval": {
+                "record_index": 1,
+                "source_chunk_id": "iitj.ac.in_search_0001"
+            }
+        },
+        {
+            "record_id": "iitj.ac.in_search_0002",
+            "text": "CCCD @ IITJ\nRecruitment\nCorrespondence\nRTI\nTenders\nTechscape\nOld Website\nNCCR Portal\nHow To Reach IITJ\nInstitute Repository\nDonations\nWeb Policy\nWeb Information Manager\nFeedback\nCERT-IN\nNIRF\nInternal Committee\nIntranet Links\nIIT Jodhpur Facebook Page IIT Jodhpur Twitter Page IIT Jodhpur You tube Channel IIT Jodhpur Instagram Page IIT Jodhpur Linkedin Page\nG20 India 2023 75 Azadi Ka Amrit Mahotsav Prime Minister's Research Fellowship \\(PMRF\\) Vidya Lakshmi Fulfilling Educational Aspirations National Commission for Women \\(NCW\\) Helpline National Anti-Ragging Monitoring Agency india.gov.in National portal of India\nFor any comments/enquiries/feedback, please email the WIM.",
+            "metadata": {
+                "source_url": "https://iitj.ac.in/Search",
+                "domain": "iitj.ac.in",
+                "category": "others",
+                "document_type": "webpage",
+                "source_document": "search.json",
+                "page_number": null,
+                "section": "Search Here",
+                "title": "Search | Indian Institute of Technology Jodhpur | IIT Jodhpur"
+            },
+            "retrieval": {
+                "record_index": 2,
+                "source_chunk_id": "iitj.ac.in_search_0002"
+            }
+        }
+    ]
+}

@@ -16,6 +16,7 @@ from pipeline.navigation_pipeline import NavigationPipeline
 from processors.page_processor import PageProcessor
 from processors.document_downloader import DocumentDownloader
 from processors.pdf_processor import PDFProcessor
+from processors.document_integrator import DocumentIntegrator
 
 from url_discovery import URLDiscovery
 
@@ -67,6 +68,7 @@ class CrawlEngine:
 
         self.document_downloader = DocumentDownloader()
         self.pdf_processor = PDFProcessor()
+        self.document_integrator = DocumentIntegrator()
 
         # ----------------------------------------------------------
         # STATISTICS
@@ -425,35 +427,37 @@ class CrawlEngine:
         )
 
         # --------------------------------------------------------------
-        # PROCESSING RESULT
+        # PHASE 6.7 — INTEGRATE INTO MAIN STORAGE
         # --------------------------------------------------------------
 
-        if isinstance(result, dict):
+        markdown_path = result
 
-            if "pages" in result:
+        metadata_path = (
+            markdown_path.with_suffix(".json")
+        )
 
-                print(
-                    "Pages:",
-                    result["pages"],
-                )
+        domain = urlparse(
+            plan.url
+        ).netloc
 
-            if "pages_with_text" in result:
+        integrated_markdown, integrated_metadata = (
+            self.document_integrator.integrate(
+                markdown_path=markdown_path,
+                metadata_path=metadata_path,
+                domain=domain,
+                category="others",
+            )
+        )
 
-                print(
-                    "Pages with text:",
-                    result[
-                        "pages_with_text"
-                    ],
-                )
+        print(
+            "Integrated Markdown:",
+            integrated_markdown,
+        )
 
-            if "text_length" in result:
-
-                print(
-                    "Text length:",
-                    result[
-                        "text_length"
-                    ],
-                )
+        print(
+            "Integrated Metadata:",
+            integrated_metadata,
+        )
 
     # ------------------------------------------------------------------
     # START CRAWL
@@ -704,4 +708,4 @@ class CrawlEngine:
 
             print(
                 "\n----------------------------------------"
-            )
+            )                                                         

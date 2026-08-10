@@ -1,0 +1,17 @@
+{
+    "source_url": "https://home.iitd.ac.in/uploads/Newsletter-Apr-26-Issue.pdf",
+    "source_file": "storage/documents/home.iitd.ac.in/newsletter-apr-26-issue.pdf",
+    "document_type": "pdf",
+    "pages": 22,
+    "pages_with_text": 21,
+    "text_length": 43664,
+    "extraction_success": true,
+    "storage_domain": "home.iitd.ac.in",
+    "storage_category": "others",
+    "storage_path": "storage/output/home.iitd.ac.in/others/newsletter-apr-26-issue.md",
+    "knowledge_cleaned": true,
+    "cleaning_version": "7.3",
+    "cleaned_content_length": 43406,
+    "original_content_length": 43982,
+    "cleaned_storage_path": "storage/knowledge/home.iitd.ac.in/others/newsletter-apr-26-issue.md"
+}
