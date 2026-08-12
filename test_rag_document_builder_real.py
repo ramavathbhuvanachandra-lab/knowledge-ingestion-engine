@@ -11,10 +11,10 @@ TEST_DOMAINS = [
             "storage/organized_knowledge/"
             "iitj.ac.in"
         ),
-        "expected_files": 0,
+        "expected_files": 3,
         "reason": (
-            "Current IITJ test source contains "
-            "only noise sections."
+            "IITJ Office of Research & Development "
+            "contains validated knowledge."
         ),
     },
     {

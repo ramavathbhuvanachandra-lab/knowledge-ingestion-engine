@@ -3,7 +3,7 @@
     "domain": "gwpgc.ac.in",
     "document": "government_girls_p_g_college_ghazipur",
     "categories": {
-        "college_overview": 1,
+        "college_overview": 2,
         "admissions": 0,
         "academics": 0,
         "departments": 0,
@@ -11,7 +11,7 @@
         "fees": 0,
         "scholarships": 0,
         "hostel": 0,
-        "examinations": 1,
+        "examinations": 0,
         "placements": 0,
         "facilities": 0,
         "student_services": 0,
@@ -26,7 +26,6 @@
     "organized_sections": 3,
     "written_files": [
         "storage/organized_knowledge/gwpgc.ac.in/college_overview/government_girls_p_g_college_ghazipur.md",
-        "storage/organized_knowledge/gwpgc.ac.in/examinations/government_girls_p_g_college_ghazipur.md",
         "storage/organized_knowledge/gwpgc.ac.in/other/government_girls_p_g_college_ghazipur.md"
     ]
 }

@@ -68,10 +68,6 @@ class KnowledgeOrganizer:
         "accessibility",
         "menu",
         "navigation",
-        "quick access",
-        "quick links",
-        "important links",
-        "useful links",
     }
 
     # ========================================================
@@ -183,12 +179,9 @@ class KnowledgeOrganizer:
             "exams",
             "result",
             "results",
-            "exam result",
             "question paper",
             "date sheet",
-            "exam timetable",
             "timetable",
-            "evaluation of answer scripts",
             "evaluation",
             "assessment",
         ),
@@ -291,11 +284,7 @@ class KnowledgeOrganizer:
             "director message",
             "vision",
             "mission",
-            "accreditation",
-            "accredited",
             "motto",
-            "naac",
-            "ugc",
             "objectives",
             "objectives of the college",
         ),
@@ -318,79 +307,6 @@ class KnowledgeOrganizer:
     # ========================================================
     # PUBLIC API
     # ========================================================
-
-
-    # ========================================================
-    # LEGACY CRAWLER COMPATIBILITY
-    # ========================================================
-
-    def get_save_location(self, page):
-        """
-        Compatibility API used by PageProcessor.
-
-        This method belongs only to the crawler's
-        intermediate page-storage stage.
-
-        It does NOT perform Phase 8 knowledge organization.
-
-        Phase 8 organization is performed later by:
-
-            organize(markdown_path)
-
-        Returns:
-            tuple[str, str]:
-                (category, filename)
-        """
-
-        url = (page.url or "").lower()
-
-        category = "others"
-        filename = "page"
-
-        # ----------------------------------------------------
-        # LEGACY PAGE-LEVEL CLASSIFICATION
-        #
-        # This is ONLY for crawler compatibility.
-        # Final knowledge organization happens in Phase 8.
-        # ----------------------------------------------------
-
-        if "electrical" in url:
-            category = "departments/electrical"
-
-        elif "computer" in url or "cse" in url:
-            category = "departments/cse"
-
-        elif "hostel" in url:
-            category = "hostel"
-
-        elif "admission" in url:
-            category = "admissions"
-
-        elif "academics" in url:
-            category = "academics"
-
-        elif "faculty" in url:
-            category = "faculty"
-
-        elif "research" in url:
-            category = "research"
-
-        # ----------------------------------------------------
-        # URL-BASED FILENAME FALLBACK
-        # ----------------------------------------------------
-
-        parsed = urlparse(url)
-
-        parts = [
-            part
-            for part in parsed.path.split("/")
-            if part
-        ]
-
-        if parts:
-            filename = "_".join(parts)
-
-        return category, filename
 
     def organize(
         self,

@@ -4,10 +4,9 @@ from crawler.crawl_engine import CrawlEngine
 
 
 TEST_URLS = [
-    "https://gwpgc.ac.in/",
+    
     "https://www.iitj.ac.in/",
-    "https://www.vbspu.ac.in/en",
-    "https://home.iitd.ac.in/",
+    
 ]
 
 

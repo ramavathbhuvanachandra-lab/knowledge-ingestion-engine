@@ -394,7 +394,6 @@ class KnowledgeStructurer:
             )
 
             # Skip completely empty sections.
-
             if (
                 not section["heading"]
                 and not content
@@ -489,7 +488,7 @@ class KnowledgeStructurer:
             return "accessibility"
 
         # ----------------------------------------------------
-        # NAVIGATION HEADING
+        # NAVIGATION HEADING / CONTENT
         # ----------------------------------------------------
 
         navigation_terms = (
@@ -513,7 +512,7 @@ class KnowledgeStructurer:
             return "navigation"
 
         # ----------------------------------------------------
-        # LINK-HEAVY CONTENT
+        # CONTENT LINES
         # ----------------------------------------------------
 
         lines = [
@@ -523,6 +522,110 @@ class KnowledgeStructurer:
         ]
 
         if lines:
+
+            # ------------------------------------------------
+            # PRE-HEADING WEBSITE BOILERPLATE
+            # ------------------------------------------------
+            #
+            # A section without a heading can contain the
+            # website's global header/navigation area.
+            #
+            # Do not classify every heading-less section as
+            # navigation. Require multiple independent signals.
+            # ------------------------------------------------
+
+            if heading is None:
+
+                navigation_signals = 0
+
+                # Site navigation links.
+                navigation_link_terms = (
+                    "home",
+                    "people",
+                    "advertisement",
+                    "automation",
+                    "project",
+                    "ipr",
+                    "forms",
+                    "information",
+                    "notification",
+                    "funding opportunities",
+                    "contact",
+                    "sitemap",
+                )
+
+                navigation_term_matches = sum(
+                    1
+                    for term in navigation_link_terms
+                    if term in content_text
+                )
+
+                if navigation_term_matches >= 3:
+                    navigation_signals += 1
+
+                # Language selector.
+                language_terms = (
+                    "* english",
+                    "* hindi",
+                    "* assamese",
+                    "* bengali",
+                    "* gujarati",
+                    "* kannada",
+                    "* malayalam",
+                    "* marathi",
+                    "* tamil",
+                    "* telugu",
+                    "* urdu",
+                )
+
+                language_matches = sum(
+                    1
+                    for term in language_terms
+                    if term in content_text
+                )
+
+                if language_matches >= 3:
+                    navigation_signals += 1
+
+                # Translation / accessibility / site UI markers.
+                ui_terms = (
+                    "bhashini",
+                    "feedback.svg",
+                    "powered by",
+                    "redirecttologinpage",
+                    "a+ a a-",
+                    "sitemap",
+                )
+
+                ui_matches = sum(
+                    1
+                    for term in ui_terms
+                    if term in content_text
+                )
+
+                if ui_matches >= 1:
+                    navigation_signals += 1
+
+                # Global site links / image links.
+                site_link_count = sum(
+                    1
+                    for line in lines
+                    if (
+                        "www.iitj.ac.in" in line
+                        or "iitj.ac.in" in line
+                    )
+                )
+
+                if site_link_count >= 3:
+                    navigation_signals += 1
+
+                # Require multiple independent signals.
+                if navigation_signals >= 2:
+                    return "navigation"
+
+            # ------------------------------------------------
+            # LINK-HEAVY CONTENT
+            # ------------------------------------------------
 
             link_lines = sum(
                 1

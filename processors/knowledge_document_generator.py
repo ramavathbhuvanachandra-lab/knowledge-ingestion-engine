@@ -8,7 +8,7 @@ class KnowledgeDocumentGenerator:
     Phase 8.1 — Knowledge Document Generator
 
     Converts validated retrieval JSON files into
-    final RAG-ready Markdown documents.
+    knowledge Markdown documents.
 
     Responsibilities:
     - Read retrieval JSON.
@@ -19,6 +19,10 @@ class KnowledgeDocumentGenerator:
     - Do NOT clean knowledge.
     - Do NOT generate embeddings.
     - Do NOT connect to a vector database.
+
+    PDF handling:
+    - If a PDF record has no semantic section,
+      its page number is used as the structural section.
     """
 
     def __init__(
@@ -36,9 +40,7 @@ class KnowledgeDocumentGenerator:
         retrieval_path: str | Path,
     ) -> Path:
 
-        retrieval_path = Path(
-            retrieval_path
-        )
+        retrieval_path = Path(retrieval_path)
 
         # ----------------------------------------------------
         # VALIDATION
@@ -324,6 +326,37 @@ class KnowledgeDocumentGenerator:
                 section = section.strip()
             else:
                 section = None
+
+            # ------------------------------------------------
+            # PDF PAGE FALLBACK
+            #
+            # PDF retrieval records currently contain:
+            #
+            #     section: None
+            #     page_number: N
+            #
+            # Use the page number as the structural
+            # Markdown section so Phase 7.4 can correctly
+            # identify and process PDF content.
+            # ------------------------------------------------
+
+            if (
+                not section
+                and str(
+                    metadata.get(
+                        "document_type",
+                        ""
+                    )
+                ).lower() == "pdf"
+            ):
+                page_number = metadata.get(
+                    "page_number"
+                )
+
+                if page_number is not None:
+                    section = (
+                        f"Page {page_number}"
+                    )
 
             # ------------------------------------------------
             # SECTION HEADING

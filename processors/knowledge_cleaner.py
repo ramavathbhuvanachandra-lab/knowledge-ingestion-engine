@@ -1,25 +1,42 @@
 from pathlib import Path
 import json
 import re
+from urllib.parse import urlparse
 
 
 class KnowledgeCleaner:
     """
-    Phase 7.3:
-    Clean and normalize extracted knowledge documents.
+    PHASE 7.3 — KNOWLEDGE CLEANING
 
-    Responsibilities:
+    Purpose:
+        Convert crawler-produced Markdown into clean,
+        human-verifiable, RAG-ready knowledge Markdown.
 
-    - Read Markdown + metadata pairs.
-    - Normalize whitespace.
-    - Remove obvious extraction noise.
-    - Preserve meaningful headings, paragraphs,
-      lists, tables, and links.
-    - Preserve source metadata.
-    - Do not chunk.
-    - Do not embed.
-    - Do not modify crawler output.
+    Design principles:
+        - Remove obvious website/UI noise.
+        - Preserve page-specific knowledge.
+        - Preserve headings.
+        - Preserve paragraphs.
+        - Preserve lists.
+        - Preserve tables.
+        - Preserve meaningful links.
+        - Never aggressively delete unknown content.
+        - Never chunk.
+        - Never embed.
+        - Never modify crawler output.
+
+    Input:
+        storage/output/<domain>/<category>/<file>.md
+        storage/output/<domain>/<category>/<file>.json
+
+    Output:
+        storage/knowledge/<domain>/<category>/<file>.md
+        storage/knowledge/<domain>/<category>/<file>.json
     """
+
+    # --------------------------------------------------------
+    # CONSTRUCTOR
+    # --------------------------------------------------------
 
     def __init__(
         self,
@@ -46,26 +63,22 @@ class KnowledgeCleaner:
 
         if not markdown_path.exists():
             raise FileNotFoundError(
-                f"Markdown file does not exist: "
-                f"{markdown_path}"
+                f"Markdown file does not exist: {markdown_path}"
             )
 
         if not metadata_path.exists():
             raise FileNotFoundError(
-                f"Metadata file does not exist: "
-                f"{metadata_path}"
+                f"Metadata file does not exist: {metadata_path}"
             )
 
         if not markdown_path.is_file():
             raise ValueError(
-                f"Markdown path is not a file: "
-                f"{markdown_path}"
+                f"Markdown path is not a file: {markdown_path}"
             )
 
         if not metadata_path.is_file():
             raise ValueError(
-                f"Metadata path is not a file: "
-                f"{metadata_path}"
+                f"Metadata path is not a file: {metadata_path}"
             )
 
         # ----------------------------------------------------
@@ -83,7 +96,7 @@ class KnowledgeCleaner:
         )
 
         # ----------------------------------------------------
-        # CLEAN CONTENT
+        # CLEAN
         # ----------------------------------------------------
 
         cleaned = self._clean_markdown(
@@ -164,25 +177,11 @@ class KnowledgeCleaner:
 
         metadata = dict(metadata)
 
-        metadata[
-            "knowledge_cleaned"
-        ] = True
-
-        metadata[
-            "cleaning_version"
-        ] = "7.3"
-
-        metadata[
-            "cleaned_content_length"
-        ] = len(cleaned)
-
-        metadata[
-            "original_content_length"
-        ] = len(markdown)
-
-        metadata[
-            "cleaned_storage_path"
-        ] = str(
+        metadata["knowledge_cleaned"] = True
+        metadata["cleaning_version"] = "7.3"
+        metadata["cleaned_content_length"] = len(cleaned)
+        metadata["original_content_length"] = len(markdown)
+        metadata["cleaned_storage_path"] = str(
             output_markdown
         )
 
@@ -200,9 +199,9 @@ class KnowledgeCleaner:
             output_metadata,
         )
 
-    # --------------------------------------------------------
+    # ========================================================
     # MARKDOWN CLEANING
-    # --------------------------------------------------------
+    # ========================================================
 
     def _clean_markdown(
         self,
@@ -211,7 +210,10 @@ class KnowledgeCleaner:
 
         text = markdown
 
-        # Normalize line endings.
+        # ----------------------------------------------------
+        # 1. NORMALIZE BASIC TEXT
+        # ----------------------------------------------------
+
         text = text.replace(
             "\r\n",
             "\n",
@@ -222,13 +224,15 @@ class KnowledgeCleaner:
             "\n",
         )
 
-        # Remove null characters.
         text = text.replace(
             "\x00",
             "",
         )
 
-        # Remove obvious accessibility-tool boilerplate.
+        # ----------------------------------------------------
+        # 2. REMOVE TECHNICAL / ACCESSIBILITY GARBAGE
+        # ----------------------------------------------------
+
         text = re.sub(
             r"Ctrl\+F2.*",
             "",
@@ -236,42 +240,29 @@ class KnowledgeCleaner:
             flags=re.IGNORECASE,
         )
 
-        text = re.sub(
+        technical_patterns = [
             r"UX4G Accessibility Tool",
-            "",
-            text,
-            flags=re.IGNORECASE,
-        )
-
-        text = re.sub(
             r"Accessibility options Ctrl\+F2",
-            "",
-            text,
-            flags=re.IGNORECASE,
-        )
-
-        # Remove repeated accessibility option labels.
-        accessibility_patterns = [
             r"Open the accessibility option",
-            r"Bigger Text",
-            r"Smaller Text",
-            r"Text Spacing",
-            r"Line Height",
-            r"Dyslexia Friendly",
-            r"ADHD Mode",
-            r"Saturation Low Saturation High Saturation",
-            r"Desaturate",
-            r"Light-Dark",
-            r"Invert Colors",
-            r"Highlight Links",
+            r"Reset All Settings",
             r"Text To Speech",
-            r"Cursor",
             r"Pause Animation",
             r"Hide Images",
-            r"Reset All Settings",
+            r"Cursor",
+            r"Dyslexia Friendly",
+            r"ADHD Mode",
+            r"Highlight Links",
+            r"Desaturate",
+            r"Invert Colors",
+            r"Light-Dark",
+            r"Line Height",
+            r"Text Spacing",
+            r"Bigger Text",
+            r"Smaller Text",
+            r"Saturation Low Saturation High Saturation",
         ]
 
-        for pattern in accessibility_patterns:
+        for pattern in technical_patterns:
             text = re.sub(
                 pattern,
                 "",
@@ -279,60 +270,470 @@ class KnowledgeCleaner:
                 flags=re.IGNORECASE,
             )
 
-        # Remove empty image-only Markdown links.
+        # ----------------------------------------------------
+        # 3. REMOVE JAVASCRIPT / UI ARTIFACTS
+        # ----------------------------------------------------
+
+        text = re.sub(
+            r"\[[^\]]*\]\(\s*javascript:[^)]+\)",
+            "",
+            text,
+            flags=re.IGNORECASE,
+        )
+
+        text = re.sub(
+            r"javascript:[^\s)]+",
+            "",
+            text,
+            flags=re.IGNORECASE,
+        )
+
+        # ----------------------------------------------------
+        # 4. REMOVE EMPTY IMAGE/LINK ELEMENTS
+        # ----------------------------------------------------
+
         text = re.sub(
             r"!\[\s*\]\([^)]*\)",
             "",
             text,
         )
 
-        # Normalize horizontal whitespace.
+        text = re.sub(
+            r"\[\s*\]\([^)]*\)",
+            "",
+            text,
+        )
+
+        # ----------------------------------------------------
+        # 5. REMOVE COMMON UI-ONLY LINES
+        #
+        # These are safe because they do not contain knowledge.
+        # ----------------------------------------------------
+
+        ui_only_patterns = [
+            r"^Previous Next pause$",
+            r"^Previous Next$",
+            r"^Next Previous$",
+            r"^pause$",
+            r"^Play$",
+            r"^Submit$",
+            r"^Rate this translation$",
+            r"^Do you like to give feedback$",
+            r"^Search$",
+            r"^Menu$",
+            r"^Close$",
+        ]
+
+        lines = text.split("\n")
+
+        filtered_lines = []
+
+        for line in lines:
+
+            stripped = line.strip()
+
+            if not stripped:
+                filtered_lines.append("")
+                continue
+
+            remove = False
+
+            for pattern in ui_only_patterns:
+                if re.match(
+                    pattern,
+                    stripped,
+                    flags=re.IGNORECASE,
+                ):
+                    remove = True
+                    break
+
+            if remove:
+                continue
+
+            filtered_lines.append(
+                line
+            )
+
+        text = "\n".join(
+            filtered_lines
+        )
+
+        # ----------------------------------------------------
+        # 6. REMOVE GLOBAL WEBSITE CHROME
+        #
+        # Important:
+        # We only remove clearly identifiable global
+        # navigation/footer blocks.
+        #
+        # Unknown content is preserved.
+        # ----------------------------------------------------
+
+        lines = text.split("\n")
+
+        lines = self._remove_global_header(
+            lines
+        )
+
+        lines = self._remove_global_footer(
+            lines
+        )
+
+        text = "\n".join(lines)
+
+        # ----------------------------------------------------
+        # 7. REMOVE REPEATED LANGUAGE SELECTOR BLOCKS
+        # ----------------------------------------------------
+
+        text = self._remove_language_block(
+            text
+        )
+
+        # ----------------------------------------------------
+        # 8. REMOVE EMPTY LINK DUPLICATION
+        # ----------------------------------------------------
+
+        text = re.sub(
+            r"(https?://[^\s]+)\s+\1",
+            r"\1",
+            text,
+        )
+
+        # ----------------------------------------------------
+        # 9. NORMALIZE HORIZONTAL WHITESPACE
+        # ----------------------------------------------------
+
         text = re.sub(
             r"[ \t]+",
             " ",
             text,
         )
 
-        # Remove whitespace around blank lines.
-        lines = [
-            line.strip()
-            for line in text.split("\n")
-        ]
+        # ----------------------------------------------------
+        # 10. NORMALIZE BLANK LINES
+        # ----------------------------------------------------
 
-        # Remove excessive blank lines.
-        cleaned_lines = []
+        normalized_lines = []
 
         blank_count = 0
 
-        for line in lines:
+        for line in text.split("\n"):
+
+            line = line.strip()
 
             if not line:
-
                 blank_count += 1
 
                 if blank_count <= 2:
-                    cleaned_lines.append("")
+                    normalized_lines.append("")
 
                 continue
 
             blank_count = 0
 
-            cleaned_lines.append(
+            normalized_lines.append(
                 line
             )
 
         text = "\n".join(
-            cleaned_lines
+            normalized_lines
         )
 
-        # Remove leading/trailing blank space.
+        # ----------------------------------------------------
+        # 11. REMOVE EMPTY MARKDOWN ARTIFACTS
+        # ----------------------------------------------------
+
+        text = re.sub(
+            r"^#+\s*$",
+            "",
+            text,
+            flags=re.MULTILINE,
+        )
+
+        text = re.sub(
+            r"^\[\s*\]\([^)]*\)\s*$",
+            "",
+            text,
+            flags=re.MULTILINE,
+        )
+
+        # ----------------------------------------------------
+        # 12. FINAL WHITESPACE CLEANUP
+        # ----------------------------------------------------
+
         text = text.strip()
 
         return text
 
-    # --------------------------------------------------------
+    # ========================================================
+    # GLOBAL HEADER
+    # ========================================================
+
+    def _remove_global_header(
+        self,
+        lines: list[str],
+    ) -> list[str]:
+
+        """
+        Remove the obvious global website header.
+
+        We stop removal once actual page content starts.
+
+        This is intentionally conservative.
+        """
+
+        if not lines:
+            return lines
+
+        result = []
+
+        started = False
+
+        for line in lines:
+
+            stripped = line.strip()
+
+            if started:
+                result.append(line)
+                continue
+
+            # ------------------------------------------------
+            # Strong page-content signals
+            # ------------------------------------------------
+
+            if self._looks_like_content_start(
+                stripped
+            ):
+                started = True
+                result.append(line)
+                continue
+
+            # ------------------------------------------------
+            # Obvious global header
+            # ------------------------------------------------
+
+            if self._looks_like_global_header(
+                stripped
+            ):
+                continue
+
+            # Preserve uncertain content.
+            #
+            # We do NOT aggressively delete it.
+            result.append(line)
+
+        return result
+
+    # ========================================================
+    # GLOBAL HEADER DETECTION
+    # ========================================================
+
+    def _looks_like_global_header(
+        self,
+        line: str,
+    ) -> bool:
+
+        if not line:
+            return False
+
+        lower = line.lower()
+
+        # Language selector
+        languages = [
+            "english",
+            "assamese",
+            "bengali",
+            "bodo",
+            "dogri",
+            "gujarati",
+            "hindi",
+            "kannada",
+            "kashmiri",
+            "maithili",
+            "malayalam",
+            "manipuri",
+            "marathi",
+            "nepali",
+            "odia",
+            "punjabi",
+            "sanskrit",
+            "santali",
+            "sindhi",
+            "tamil",
+            "telugu",
+            "urdu",
+        ]
+
+        language_hits = sum(
+            1
+            for language in languages
+            if language in lower
+        )
+
+        if language_hits >= 3:
+            return True
+
+        # Common global navigation
+        navigation_words = [
+            "[ home ]",
+            "[ sitemap ]",
+            "sitemap",
+        ]
+
+        if lower in navigation_words:
+            return True
+
+        # Accessibility remnants
+        if "accessibility" in lower:
+            return True
+
+        if "ctrl+f2" in lower:
+            return True
+
+        return False
+
+    # ========================================================
+    # CONTENT START DETECTION
+    # ========================================================
+
+    def _looks_like_content_start(
+        self,
+        line: str,
+    ) -> bool:
+
+        if not line:
+            return False
+
+        # Markdown heading
+        if re.match(
+            r"^#{1,6}\s+\S+",
+            line,
+        ):
+            return True
+
+        # Strong page-specific sentence.
+        #
+        # Avoid using this too aggressively.
+        if len(line) > 150:
+            return True
+
+        return False
+
+    # ========================================================
+    # LANGUAGE BLOCK
+    # ========================================================
+
+    def _remove_language_block(
+        self,
+        text: str,
+    ) -> str:
+
+        languages = [
+            "English",
+            "Assamese",
+            "Bengali",
+            "Bodo",
+            "Dogri",
+            "Gujarati",
+            "Hindi",
+            "Kannada",
+            "Kashmiri",
+            "Maithili",
+            "Malayalam",
+            "Manipuri",
+            "Marathi",
+            "Nepali",
+            "Odia",
+            "Punjabi",
+            "Sanskrit",
+            "Santali",
+            "Sindhi",
+            "Tamil",
+            "Telugu",
+            "Urdu",
+        ]
+
+        lines = text.split("\n")
+
+        result = []
+
+        for line in lines:
+
+            stripped = line.strip()
+
+            lower = stripped.lower()
+
+            hits = sum(
+                1
+                for language in languages
+                if language.lower() in lower
+            )
+
+            # A line containing many languages is almost
+            # certainly the global language selector.
+            if hits >= 4:
+                continue
+
+            result.append(line)
+
+        return "\n".join(result)
+
+    # ========================================================
+    # GLOBAL FOOTER
+    # ========================================================
+
+    def _remove_global_footer(
+        self,
+        lines: list[str],
+    ) -> list[str]:
+
+        """
+        Remove the common global footer once a strong footer
+        marker is encountered.
+
+        This intentionally removes everything AFTER the
+        global footer marker because that region is normally
+        site-wide navigation, social links, copyright and
+        government/portal logos.
+
+        Page-specific content occurring before this marker
+        remains untouched.
+        """
+
+        footer_markers = [
+            "important links",
+            "copyright ©",
+            "copyright",
+            "for any comments/enquiries/feedback",
+            "web information manager",
+        ]
+
+        cutoff = None
+
+        for index, line in enumerate(lines):
+
+            lower = line.strip().lower()
+
+            if not lower:
+                continue
+
+            for marker in footer_markers:
+
+                if marker in lower:
+                    cutoff = index
+                    break
+
+            if cutoff is not None:
+                break
+
+        if cutoff is None:
+            return lines
+
+        # Keep content before footer.
+        return lines[:cutoff]
+
+    # ========================================================
     # DOMAIN FALLBACK
-    # --------------------------------------------------------
+    # ========================================================
 
     def _domain_from_metadata(
         self,
@@ -355,9 +756,9 @@ class KnowledgeCleaner:
 
         return "unknown"
 
-    # --------------------------------------------------------
+    # ========================================================
     # SAFE COMPONENT
-    # --------------------------------------------------------
+    # ========================================================
 
     def _clean_component(
         self,

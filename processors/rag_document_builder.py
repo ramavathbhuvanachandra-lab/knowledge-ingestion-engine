@@ -33,21 +33,22 @@ class RAGDocumentBuilder:
 
     - Preserve organized knowledge.
     - Create one DOCX per category.
-    - Preserve section headings.
-    - Preserve source information.
+    - Preserve meaningful section headings.
+    - Preserve meaningful content.
     - Preserve links as readable text.
+    - Remove obvious residual extraction/UI noise.
     - Never rewrite factual content.
     - Never use an LLM.
     - Never modify canonical knowledge.
+    - Never chunk.
+    - Never embed.
     """
 
     def __init__(
         self,
         output_root: str | Path = "storage/rag_knowledge",
     ):
-        self.output_root = Path(
-            output_root
-        )
+        self.output_root = Path(output_root)
 
     # ========================================================
     # PUBLIC API
@@ -60,12 +61,16 @@ class RAGDocumentBuilder:
         """
         Build all RAG DOCX files for one domain.
 
+        Only sections containing usable knowledge are converted.
+
         Returns summary information.
         """
 
-        organized_root = Path(
-            organized_root
-        )
+        organized_root = Path(organized_root)
+
+        # ----------------------------------------------------
+        # VALIDATION
+        # ----------------------------------------------------
 
         if not organized_root.exists():
             raise FileNotFoundError(
@@ -93,6 +98,9 @@ class RAGDocumentBuilder:
 
         category_files = {}
 
+        total_sections = 0
+        total_files = 0
+
         # ----------------------------------------------------
         # PROCESS EACH CATEGORY
         # ----------------------------------------------------
@@ -102,9 +110,6 @@ class RAGDocumentBuilder:
             for path in organized_root.iterdir()
             if path.is_dir()
         )
-
-        total_sections = 0
-        total_files = 0
 
         for category_dir in category_dirs:
 
@@ -131,7 +136,14 @@ class RAGDocumentBuilder:
                     file_sections
                 )
 
+            # ------------------------------------------------
+            # NO USABLE KNOWLEDGE
+            # ------------------------------------------------
+
             if not sections:
+                self._remove_stale_output(
+                    output_dir / f"{category}.docx"
+                )
                 continue
 
             output_path = (
@@ -188,7 +200,10 @@ class RAGDocumentBuilder:
     ) -> list[dict]:
         """
         Read an organized Markdown file and extract
-        its H2 knowledge sections.
+        meaningful H2 knowledge sections.
+
+        Obvious residual website/extraction noise is
+        rejected here before DOCX creation.
         """
 
         content = markdown_path.read_text(
@@ -215,25 +230,27 @@ class RAGDocumentBuilder:
 
             if match:
 
+                # Finalize previous section.
                 if current_heading is not None:
 
                     text = "\n".join(
                         current_lines
                     ).strip()
 
-                    if text:
+                    section = {
+                        "heading": current_heading,
+                        "text": text,
+                        "source_file": markdown_path.name,
+                    }
 
+                    if (
+                        text
+                        and not self._looks_like_noise(
+                            section
+                        )
+                    ):
                         sections.append(
-                            {
-                                "heading":
-                                    current_heading,
-
-                                "text":
-                                    text,
-
-                                "source_file":
-                                    markdown_path.name,
-                            }
+                            section
                         )
 
                 current_heading = (
@@ -262,13 +279,15 @@ class RAGDocumentBuilder:
                 continue
 
             # ------------------------------------------------
-            # IGNORE FILE METADATA
+            # IGNORE CONTENT BEFORE FIRST H2
             # ------------------------------------------------
 
-            if (
-                current_heading is None
-            ):
+            if current_heading is None:
                 continue
+
+            # ------------------------------------------------
+            # IGNORE FILE METADATA
+            # ------------------------------------------------
 
             if re.match(
                 r"^\*\*Domain:\*\*",
@@ -291,9 +310,7 @@ class RAGDocumentBuilder:
             ):
                 continue
 
-            current_lines.append(
-                line
-            )
+            current_lines.append(line)
 
         # ----------------------------------------------------
         # FINAL SECTION
@@ -305,22 +322,286 @@ class RAGDocumentBuilder:
                 current_lines
             ).strip()
 
-            if text:
+            section = {
+                "heading": current_heading,
+                "text": text,
+                "source_file": markdown_path.name,
+            }
 
+            if (
+                text
+                and not self._looks_like_noise(
+                    section
+                )
+            ):
                 sections.append(
-                    {
-                        "heading":
-                            current_heading,
-
-                        "text":
-                            text,
-
-                        "source_file":
-                            markdown_path.name,
-                    }
+                    section
                 )
 
         return sections
+
+    # ========================================================
+    # NOISE DETECTION
+    # ========================================================
+
+    def _looks_like_noise(
+        self,
+        section: dict,
+    ) -> bool:
+        """
+        Detect obvious residual website/UI/extraction noise.
+
+        This is intentionally conservative.
+
+        We reject:
+        - navigation
+        - accessibility controls
+        - search UI
+        - login/redirect artifacts
+        - cookie/UI controls
+        - image-only content
+        - link-only navigation
+        - extremely short meaningless sections
+
+        We do NOT reject normal short factual content
+        such as contact numbers, dates, names, etc.
+        """
+
+        heading = (
+            section.get("heading", "")
+            or ""
+        ).strip()
+
+        text = (
+            section.get("text", "")
+            or ""
+        ).strip()
+
+        if not heading or not text:
+            return True
+
+        normalized_heading = (
+            self._normalize_text(
+                heading
+            )
+        )
+
+        normalized_text = (
+            self._normalize_text(
+                text
+            )
+        )
+
+        # ----------------------------------------------------
+        # OBVIOUS NOISE HEADINGS
+        # ----------------------------------------------------
+
+        noise_headings = {
+            "menu",
+            "navigation",
+            "nav",
+            "search",
+            "search here",
+            "search this site",
+            "accessibility",
+            "accessibility options",
+            "skip to content",
+            "skip to main content",
+            "login",
+            "sign in",
+            "sign up",
+            "register",
+            "subscribe",
+            "follow us",
+            "social media",
+            "share",
+            "feedback",
+            "feedback form",
+            "cookie policy",
+            "cookies",
+            "privacy settings",
+            "language",
+            "select language",
+            "translation",
+            "rate this translation",
+        }
+
+        if normalized_heading in noise_headings:
+            return True
+
+        # ----------------------------------------------------
+        # OBVIOUS EXTRACTION / REDIRECT ARTIFACTS
+        # ----------------------------------------------------
+
+        noise_patterns = (
+            "redirecttologinpage",
+            "accessibility options",
+            "open the accessibility option",
+            "rate this translation",
+            "do you like to give feedback",
+            "submit",
+            "created by",
+            "powered by",
+            "important links",
+            "all rights reserved",
+            "javascript required",
+            "enable javascript",
+            "accept cookies",
+            "manage cookies",
+        )
+
+        for pattern in noise_patterns:
+
+            if pattern in normalized_text:
+                return True
+
+        # ----------------------------------------------------
+        # HTML / SVG / DATA-URI NOISE
+        # ----------------------------------------------------
+
+        html_noise_patterns = (
+            "<svg",
+            "</svg>",
+            "<path",
+            "<script",
+            "</script>",
+            "data:image/",
+            "clip-path",
+            "viewbox=",
+            "xmlns=",
+        )
+
+        lowered_text = text.lower()
+
+        html_hits = sum(
+            1
+            for pattern in html_noise_patterns
+            if pattern in lowered_text
+        )
+
+        if html_hits >= 2:
+            return True
+
+        # ----------------------------------------------------
+        # REDIRECT ARTIFACT
+        # ----------------------------------------------------
+
+        if (
+            "redirecttologinpage" in normalized_text
+            or "147852369" in text
+            and "963258741" in text
+        ):
+            return True
+
+        # ----------------------------------------------------
+        # REMOVE MARKDOWN IMAGE-ONLY SECTIONS
+        # ----------------------------------------------------
+
+        without_images = re.sub(
+            r"!\[[^\]]*\]\([^)]+\)",
+            "",
+            text,
+        ).strip()
+
+        if not without_images:
+            return True
+
+        # ----------------------------------------------------
+        # LINK / NAVIGATION DENSITY
+        # ----------------------------------------------------
+
+        links = re.findall(
+            r"\[[^\]]*\]\([^)]+\)",
+            text,
+        )
+
+        plain_text = re.sub(
+            r"\[[^\]]*\]\([^)]+\)",
+            "",
+            text,
+        )
+
+        plain_text = re.sub(
+            r"!\[[^\]]*\]\([^)]+\)",
+            "",
+            plain_text,
+        )
+
+        plain_text = re.sub(
+            r"https?://\S+",
+            "",
+            plain_text,
+        )
+
+        plain_text = re.sub(
+            r"\s+",
+            " ",
+            plain_text,
+        ).strip()
+
+        # If a section consists almost entirely of links,
+        # it is probably navigation rather than knowledge.
+        if links:
+            link_chars = sum(
+                len(link)
+                for link in links
+            )
+
+            total_chars = max(
+                len(text),
+                1,
+            )
+
+            link_ratio = (
+                link_chars / total_chars
+            )
+
+            if (
+                link_ratio >= 0.70
+                and len(plain_text) < 80
+            ):
+                return True
+
+        # ----------------------------------------------------
+        # UI-ONLY TEXT
+        # ----------------------------------------------------
+
+        ui_phrases = {
+            "home",
+            "back",
+            "next",
+            "previous",
+            "close",
+            "open",
+            "menu",
+            "more",
+            "read more",
+            "click here",
+            "learn more",
+            "submit",
+            "cancel",
+        }
+
+        if (
+            normalized_text in ui_phrases
+            and len(normalized_text) < 30
+        ):
+            return True
+
+        # ----------------------------------------------------
+        # VERY SHORT NON-INFORMATIONAL CONTENT
+        # ----------------------------------------------------
+
+        alphanumeric = re.sub(
+            r"[^a-zA-Z0-9]+",
+            "",
+            text,
+        )
+
+        if len(alphanumeric) < 8:
+            return True
+
+        return False
 
     # ========================================================
     # WRITE DOCX
@@ -397,10 +678,7 @@ class RAGDocumentBuilder:
         # SECTIONS
         # ----------------------------------------------------
 
-        for index, section in enumerate(
-            sections,
-            start=1,
-        ):
+        for section in sections:
 
             document.add_heading(
                 section["heading"],
@@ -422,26 +700,17 @@ class RAGDocumentBuilder:
 
             source_run = (
                 source_paragraph.add_run(
-                    f"Source file: "
+                    f"Source: "
                     f"{section['source_file']}"
                 )
             )
 
             source_run.italic = True
-
             source_run.font.size = Pt(
                 9
             )
 
-            # ------------------------------------------------
-            # SECTION SEPARATOR
-            # ------------------------------------------------
-
-            if index < len(sections):
-
-                document.add_paragraph(
-                    "—" * 40
-                )
+            document.add_paragraph()
 
         # ----------------------------------------------------
         # SAVE
@@ -457,7 +726,7 @@ class RAGDocumentBuilder:
         )
 
     # ========================================================
-    # MARKDOWN → DOCX CONTENT
+    # MARKDOWN CONTENT
     # ========================================================
 
     def _add_markdown_content(
@@ -465,28 +734,34 @@ class RAGDocumentBuilder:
         document: Document,
         text: str,
     ) -> None:
+        """
+        Convert basic Markdown into readable DOCX content.
+
+        The factual text itself is preserved.
+        """
 
         lines = text.splitlines()
 
-        paragraph_lines = []
+        paragraph_buffer = []
 
         def flush_paragraph():
-
-            if not paragraph_lines:
+            if not paragraph_buffer:
                 return
 
-            paragraph_text = " ".join(
-                paragraph_lines
-            ).strip()
+            paragraph_text = (
+                " ".join(
+                    line.strip()
+                    for line in paragraph_buffer
+                ).strip()
+            )
 
             if paragraph_text:
-
-                self._add_formatted_paragraph(
+                self._add_inline_markdown(
                     document,
                     paragraph_text,
                 )
 
-            paragraph_lines.clear()
+            paragraph_buffer.clear()
 
         for line in lines:
 
@@ -497,24 +772,41 @@ class RAGDocumentBuilder:
             # ------------------------------------------------
 
             if not stripped:
+                flush_paragraph()
+                continue
+
+            # ------------------------------------------------
+            # SUBHEADING
+            # ------------------------------------------------
+
+            heading_match = re.match(
+                r"^###\s+(.+)$",
+                stripped,
+            )
+
+            if heading_match:
 
                 flush_paragraph()
+
+                document.add_heading(
+                    heading_match.group(1).strip(),
+                    level=3,
+                )
 
                 continue
 
             # ------------------------------------------------
-            # BULLET
+            # BULLET LIST
             # ------------------------------------------------
 
-            if stripped.startswith(
-                "- "
-            ):
+            bullet_match = re.match(
+                r"^[-*+]\s+(.+)$",
+                stripped,
+            )
+
+            if bullet_match:
 
                 flush_paragraph()
-
-                bullet_text = (
-                    stripped[2:].strip()
-                )
 
                 paragraph = (
                     document.add_paragraph(
@@ -522,9 +814,9 @@ class RAGDocumentBuilder:
                     )
                 )
 
-                self._add_inline_formatting(
+                self._add_inline_runs(
                     paragraph,
-                    bullet_text,
+                    bullet_match.group(1),
                 )
 
                 continue
@@ -533,18 +825,14 @@ class RAGDocumentBuilder:
             # NUMBERED LIST
             # ------------------------------------------------
 
-            numbered_match = re.match(
-                r"^\d+\.\s+(.+)",
+            number_match = re.match(
+                r"^\d+\.\s+(.+)$",
                 stripped,
             )
 
-            if numbered_match:
+            if number_match:
 
                 flush_paragraph()
-
-                numbered_text = (
-                    numbered_match.group(1)
-                )
 
                 paragraph = (
                     document.add_paragraph(
@@ -552,9 +840,9 @@ class RAGDocumentBuilder:
                     )
                 )
 
-                self._add_inline_formatting(
+                self._add_inline_runs(
                     paragraph,
-                    numbered_text,
+                    number_match.group(1),
                 )
 
                 continue
@@ -563,31 +851,19 @@ class RAGDocumentBuilder:
             # TABLE
             # ------------------------------------------------
 
-            if stripped.startswith(
-                "|"
-            ) and stripped.endswith(
-                "|"
-            ):
+            if "|" in stripped:
 
+                table_lines = [stripped]
+
+                # Collect subsequent table rows.
+                # We keep this simple and preserve the
+                # Markdown table content as readable text
+                # rather than risking data loss.
                 flush_paragraph()
 
-                # Tables are handled conservatively
-                # later. For now preserve the row as
-                # readable text instead of losing data.
-
-                table_row = (
-                    stripped.strip("|")
-                )
-
-                table_row = (
-                    table_row.replace(
-                        "|",
-                        "    ",
-                    )
-                )
-
-                document.add_paragraph(
-                    table_row
+                self._add_table_row_as_paragraph(
+                    document,
+                    stripped,
                 )
 
                 continue
@@ -596,17 +872,17 @@ class RAGDocumentBuilder:
             # NORMAL TEXT
             # ------------------------------------------------
 
-            paragraph_lines.append(
+            paragraph_buffer.append(
                 stripped
             )
 
         flush_paragraph()
 
     # ========================================================
-    # FORMATTED PARAGRAPH
+    # INLINE MARKDOWN
     # ========================================================
 
-    def _add_formatted_paragraph(
+    def _add_inline_markdown(
         self,
         document: Document,
         text: str,
@@ -616,125 +892,173 @@ class RAGDocumentBuilder:
             document.add_paragraph()
         )
 
-        self._add_inline_formatting(
+        self._add_inline_runs(
             paragraph,
             text,
         )
 
     # ========================================================
-    # INLINE MARKDOWN
+    # INLINE RUNS
     # ========================================================
 
-    def _add_inline_formatting(
+    def _add_inline_runs(
         self,
         paragraph,
         text: str,
     ) -> None:
+        """
+        Preserve readable Markdown links and basic emphasis.
+        """
 
         # ----------------------------------------------------
-        # Protect markdown links first
+        # TOKENIZE LINKS
         # ----------------------------------------------------
 
         pattern = re.compile(
-            r"(\*\*.*?\*\*|\*.*?\*|\[[^\]]+\]\([^)]+\))"
+            r"(\[[^\]]+\]\([^)]+\))"
         )
 
-        position = 0
-
-        for match in pattern.finditer(
+        parts = pattern.split(
             text
-        ):
+        )
 
-            # Normal text before match
-            if match.start() > position:
+        for part in parts:
 
-                paragraph.add_run(
-                    text[
-                        position:
-                        match.start()
-                    ]
+            if not part:
+                continue
+
+            link_match = re.match(
+                r"^\[([^\]]+)\]\(([^)]+)\)$",
+                part,
+            )
+
+            if link_match:
+
+                label = (
+                    link_match.group(1)
                 )
 
-            token = match.group(0)
-
-            # ------------------------------------------------
-            # BOLD
-            # ------------------------------------------------
-
-            if (
-                token.startswith(
-                    "**"
-                )
-                and token.endswith(
-                    "**"
-                )
-            ):
-
-                run = paragraph.add_run(
-                    token[2:-2]
+                url = (
+                    link_match.group(2)
                 )
 
-                run.bold = True
-
-            # ------------------------------------------------
-            # ITALIC
-            # ------------------------------------------------
-
-            elif (
-                token.startswith("*")
-                and token.endswith("*")
-            ):
-
-                run = paragraph.add_run(
-                    token[1:-1]
-                )
-
-                run.italic = True
-
-            # ------------------------------------------------
-            # MARKDOWN LINK
-            # ------------------------------------------------
-
-            elif token.startswith(
-                "["
-            ):
-
-                link_match = re.match(
-                    r"\[([^\]]+)\]\(([^)]+)\)",
-                    token,
-                )
-
-                if link_match:
-
-                    label = (
-                        link_match.group(1)
-                    )
-
-                    url = (
-                        link_match.group(2)
-                    )
-
-                    run = paragraph.add_run(
+                run = (
+                    paragraph.add_run(
                         f"{label} ({url})"
                     )
-
-            else:
-
-                paragraph.add_run(
-                    token
                 )
 
-            position = match.end()
+                run.underline = True
 
-        # ----------------------------------------------------
-        # Remaining text
-        # ----------------------------------------------------
+                continue
 
-        if position < len(text):
+            # ------------------------------------------------
+            # BASIC BOLD
+            # ------------------------------------------------
 
-            paragraph.add_run(
-                text[position:]
+            bold_parts = re.split(
+                r"(\*\*[^*]+\*\*)",
+                part,
             )
+
+            for bold_part in bold_parts:
+
+                if not bold_part:
+                    continue
+
+                if (
+                    bold_part.startswith("**")
+                    and bold_part.endswith("**")
+                ):
+                    run = (
+                        paragraph.add_run(
+                            bold_part[2:-2]
+                        )
+                    )
+
+                    run.bold = True
+
+                else:
+
+                    # ------------------------------------------------
+                    # BASIC ITALIC
+                    # ------------------------------------------------
+
+                    italic_parts = re.split(
+                        r"(\*[^*]+\*)",
+                        bold_part,
+                    )
+
+                    for italic_part in italic_parts:
+
+                        if not italic_part:
+                            continue
+
+                        if (
+                            italic_part.startswith("*")
+                            and italic_part.endswith("*")
+                            and not italic_part.startswith("**")
+                        ):
+                            run = (
+                                paragraph.add_run(
+                                    italic_part[1:-1]
+                                )
+                            )
+
+                            run.italic = True
+
+                        else:
+                            paragraph.add_run(
+                                italic_part
+                            )
+
+    # ========================================================
+    # TABLE ROW
+    # ========================================================
+
+    def _add_table_row_as_paragraph(
+        self,
+        document: Document,
+        line: str,
+    ) -> None:
+        """
+        Preserve Markdown table rows as readable text.
+
+        We intentionally do not reconstruct a DOCX table here
+        because preserving the original extracted values is more
+        important than changing their representation.
+        """
+
+        cleaned = line.strip()
+
+        # Ignore Markdown separator rows.
+        if re.match(
+            r"^\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)+\|?$",
+            cleaned,
+        ):
+            return
+
+        cells = [
+            cell.strip()
+            for cell in cleaned.strip("|").split("|")
+        ]
+
+        cells = [
+            cell
+            for cell in cells
+            if cell
+        ]
+
+        if not cells:
+            return
+
+        paragraph = (
+            document.add_paragraph()
+        )
+
+        paragraph.add_run(
+            " | ".join(cells)
+        )
 
     # ========================================================
     # METADATA
@@ -743,7 +1067,7 @@ class RAGDocumentBuilder:
     def _add_metadata(
         self,
         document: Document,
-        label: str,
+        key: str,
         value: str,
     ) -> None:
 
@@ -751,20 +1075,84 @@ class RAGDocumentBuilder:
             document.add_paragraph()
         )
 
-        label_run = (
+        key_run = (
             paragraph.add_run(
-                f"{label}: "
+                f"{key}: "
             )
         )
 
-        label_run.bold = True
+        key_run.bold = True
 
         paragraph.add_run(
             str(value)
         )
 
     # ========================================================
-    # CATEGORY DISPLAY
+    # STALE OUTPUT CLEANUP
+    # ========================================================
+
+    def _remove_stale_output(
+        self,
+        output_path: Path,
+    ) -> None:
+        """
+        Remove an old DOCX when the current source category
+        contains no usable knowledge.
+
+        This prevents stale RAG files from surviving a rebuild.
+        """
+
+        if (
+            output_path.exists()
+            and output_path.is_file()
+        ):
+            output_path.unlink()
+
+    # ========================================================
+    # NORMALIZATION
+    # ========================================================
+
+    def _normalize_text(
+        self,
+        value: str,
+    ) -> str:
+
+        value = (
+            value or ""
+        ).strip().lower()
+
+        # Remove Markdown links.
+        value = re.sub(
+            r"\[([^\]]+)\]\([^)]+\)",
+            r"\1",
+            value,
+        )
+
+        # Remove Markdown images.
+        value = re.sub(
+            r"!\[[^\]]*\]\([^)]+\)",
+            "",
+            value,
+        )
+
+        # Remove HTML tags.
+        value = re.sub(
+            r"<[^>]+>",
+            " ",
+            value,
+        )
+
+        # Normalize whitespace.
+        value = re.sub(
+            r"\s+",
+            " ",
+            value,
+        )
+
+        return value.strip()
+
+    # ========================================================
+    # DISPLAY CATEGORY
     # ========================================================
 
     def _display_category(
@@ -778,5 +1166,64 @@ class RAGDocumentBuilder:
                 "_",
                 " ",
             )
+            .replace(
+                "-",
+                " ",
+            )
             .title()
         )
+
+
+if __name__ == "__main__":
+    builder = RAGDocumentBuilder()
+
+    result = builder.build_domain(
+        "storage/organized_knowledge/iitj.ac.in"
+    )
+
+    print()
+    print("=" * 100)
+    print("PHASE 8.5 — RAG DOCUMENT BUILDER")
+    print("=" * 100)
+
+    print(
+        "Domain    :",
+        result["domain"],
+    )
+
+    print(
+        "Output    :",
+        result["output_root"],
+    )
+
+    print(
+        "Categories:",
+        result["categories"],
+    )
+
+    print(
+        "DOCX files:",
+        result["files"],
+    )
+
+    print(
+        "Sections  :",
+        result["sections"],
+    )
+
+    print()
+    print("GENERATED FILES")
+
+    if not result["category_files"]:
+        print(
+            "No DOCX files generated."
+        )
+    else:
+        for category, path in sorted(
+            result[
+                "category_files"
+            ].items()
+        ):
+            print(
+                f"{category:25s}: {path}"
+            )

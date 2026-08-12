@@ -7,6 +7,8 @@
 
 ---
 
+## Page 2
+
 News Updates
 Industrial Research and Development
 Research & Innovation
@@ -26,6 +28,8 @@ TABLE OF CONTENTS
 18
 
 ---
+
+## Page 3
 
 News Updates
 QS Subject Rankings 2026: IIT Delhi No.1 Indian Institute in Engineering
@@ -76,6 +80,8 @@ and New Initiatives. Under this initiative, IIT Delhi also hosted an Open House
 in Kota for the JEE aspirants. 1
 
 ---
+
+## Page 4
 
 International Women’s Day Celebrated
 As part of the International Women’s Day (IWD) celebrations
@@ -137,6 +143,8 @@ News Updates
 
 ---
 
+## Page 5
+
 MoU Signed with Jindal Steel to Establish Nodal CoE for Structural Steel
 Research and Innovation
 ISA and IIT Delhi Deepen Partnership to Advance Solar Skills Across
@@ -185,6 +193,8 @@ Dilkhush Meena, IAS, on February 18, 2026. 3
 News Updates
 
 ---
+
+## Page 6
 
 Union Communications Minister Interacts with IIT Delhi Students
 IHFC Launches Lab to Market 2.0: Driving Research to Real-World Impact
@@ -242,6 +252,8 @@ IIT Delhi Hospital and the Academic Outreach office. 4
 News Updates
 
 ---
+
+## Page 7
 
 Research & Innovation
 Research & Innovation
@@ -304,6 +316,8 @@ experiments, and analyse results independently. Read more:
 
 ---
 
+## Page 8
+
 Swallowable Microdevice That Can Collect Microbial Samples from the
 Small Intestine Developed
 Remote Healthcare: AI-powered Tele-Robotic Ultrasound Links Delhi to
@@ -339,6 +353,8 @@ Research & Innovation
 Labs at IIT Delhi
 
 ---
+
+## Page 9
 
 Industrial Research and Development
 Industrial Research and Development
@@ -436,6 +452,8 @@ Department of Humanities & Social Sciences
 
 ---
 
+## Page 10
+
 91 Consultancy Projects Total Sanctioned Fund ₹ 909.18 Lacs
 Department of Electrical Engineering
 Project Department
@@ -501,6 +519,8 @@ Industrial Research and Development
 
 ---
 
+## Page 11
+
 IRD Student Schemes
 Memorandum of Understanding (MoU)
 IRD New Initiatives
@@ -556,6 +576,8 @@ Industrial Research and Development
 
 ---
 
+## Page 12
+
 International Connect
 International Relations
 Ministerial and High-Level Diplomatic Engagements
@@ -604,6 +626,8 @@ Physics and Materials Science Dept. to strengthen DAAD-funded mobility. (Feb 16,
 
 ---
 
+## Page 13
+
 International Relations
 NZ Prime Minister’s Scholarship:
 Hosted 16 scholars for an immersion
@@ -637,6 +661,8 @@ with
 11
 
 ---
+
+## Page 14
 
 Corporate Relations
 Corporate Relations
@@ -695,6 +721,8 @@ The exchange highlighted significant
 opportunities and practical pathways for collaborative innovation for the real world. 12
 
 ---
+
+## Page 15
 
 Alumni Relations
 Alumni Relations
@@ -765,6 +793,8 @@ View the full report and donate at
 
 ---
 
+## Page 16
+
 Hostel Redevelopment Initiative Launched
 IIT Delhi Alumni Continue to Shape the Nation Through UPSC 2025
 Vinod Khosla Breaks into Forbes’ Top 10 Greatest Innovators
@@ -814,6 +844,8 @@ Alumni Relations
 
 ---
 
+## Page 17
+
 Awards
 Scholarships
 Chairs
@@ -846,6 +878,8 @@ Alumni Relations
 
 ---
 
+## Page 18
+
 Awards & Achievements
 Awards & Achievements
 Prof. Angelie Multani
@@ -868,6 +902,8 @@ Emerging Woman Leadership Award
 16
 
 ---
+
+## Page 19
 
 Awards & Achievements
 Prof. Anil Verma
@@ -902,6 +938,8 @@ into High-Energy Green Fuels’. 17
 
 ---
 
+## Page 20
+
 Recently Empanelled Service Providers for e-Vidya Programme period
 from July 1, 2026, to June 30, 2029
 Artificial Intelligence – Driving the Future
@@ -930,6 +968,8 @@ Research Ltd. Interview Bit Software Services Pvt. Ltd. Talent Sprint Pvt. Ltd. 
 
 ---
 
+## Page 21
+
 Continuing Education Programme
 Times Edutech and Events Ltd.
 UpGrad Education Pvt. Ltd.
@@ -945,6 +985,8 @@ organisations, startups, and consulting firms.
 19
 
 ---
+
+## Page 22
 
 Quarterly Newsletter
 (January-March 2026)
