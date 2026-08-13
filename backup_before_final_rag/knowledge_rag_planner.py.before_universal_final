@@ -1,0 +1,1627 @@
+"""
+Phase 8.4 — Universal Dynamic RAG Document Planner
+
+This planner is intentionally college-agnostic.
+
+Input
+-----
+8.3 knowledge_units.json
+
+Output
+------
+rag_plan.json
+
+Core principles
+---------------
+1. Never hardcode a specific college.
+2. Never require a fixed number of final documents.
+3. Never discard useful knowledge because classification is uncertain.
+4. Semantic coherence is more important than raw unit count.
+5. Taxonomy domain/category are the primary grouping signals.
+6. Preserve source-document provenance.
+7. Preserve section hierarchy.
+8. Small compatible groups may be merged.
+9. Large coherent groups may remain large.
+10. Extremely large groups may be split deterministically.
+11. REVIEW content is preserved in protected buffer documents.
+12. Every non-NOISE unit must appear exactly once.
+13. No LLM.
+14. No embeddings.
+15. No chunking.
+16. No vector database.
+17. No DOCX generation.
+"""
+
+from __future__ import annotations
+
+from collections import Counter, defaultdict
+from pathlib import Path
+import json
+import re
+
+
+class KnowledgeRAGPlanner:
+
+    # ================================================================
+    # UNIVERSAL SOFT LIMITS
+    # ================================================================
+    #
+    # These are NOT document-count rules.
+    #
+    # They are sanity limits for extremely large homogeneous groups.
+    #
+    # A coherent category below this size stays together.
+    #
+    # A category above this size is considered for natural splitting.
+    # ================================================================
+
+    SOFT_LARGE_GROUP_THRESHOLD = 220
+
+    HARD_GROUP_THRESHOLD = 400
+
+    SMALL_GROUP_THRESHOLD = 8
+
+    # ================================================================
+    # GENERIC CATEGORY RELATIONSHIPS
+    # ================================================================
+    #
+    # These are generic semantic families, not college-specific rules.
+    #
+    # They operate on taxonomy category names.
+    #
+    # Example:
+    #
+    #    academic_calendar
+    #    examinations_and_evaluation
+    #    transcripts_and_certificates
+    #
+    # can naturally live together.
+    #
+    # Another college can populate completely different categories
+    # and the planner will still operate without knowing the college.
+    # ================================================================
+
+    CATEGORY_FAMILIES = (
+        {
+            "name": "programs_and_admissions",
+            "tokens": {
+                "program",
+                "programs",
+                "programme",
+                "programmes",
+                "admission",
+                "admissions",
+                "eligibility",
+                "application",
+                "entrance",
+            },
+        },
+        {
+            "name": "academic_delivery",
+            "tokens": {
+                "course",
+                "courses",
+                "curriculum",
+                "registration",
+                "enrolment",
+                "enrollment",
+                "calendar",
+                "schedule",
+                "timetable",
+                "examination",
+                "examinations",
+                "evaluation",
+                "assessment",
+                "attendance",
+                "transcript",
+                "certificates",
+            },
+        },
+        {
+            "name": "academic_rules",
+            "tokens": {
+                "rules",
+                "regulations",
+                "regulation",
+                "policy",
+                "policies",
+                "guidelines",
+                "ordinance",
+            },
+        },
+        {
+            "name": "research",
+            "tokens": {
+                "research",
+                "project",
+                "projects",
+                "laboratory",
+                "laboratories",
+                "lab",
+                "labs",
+                "publication",
+                "publications",
+                "innovation",
+                "patents",
+                "funding",
+                "grants",
+                "collaboration",
+                "group",
+                "groups",
+                "centre",
+                "center",
+                "centres",
+                "centers",
+            },
+        },
+        {
+            "name": "people",
+            "tokens": {
+                "faculty",
+                "staff",
+                "leadership",
+                "researchers",
+                "researcher",
+                "people",
+                "committee",
+                "committees",
+                "board",
+                "boards",
+                "contacts",
+                "directory",
+            },
+        },
+        {
+            "name": "campus_and_facilities",
+            "tokens": {
+                "campus",
+                "facility",
+                "facilities",
+                "infrastructure",
+                "laboratory",
+                "laboratories",
+                "workshop",
+                "workshops",
+                "library",
+                "libraries",
+                "building",
+                "buildings",
+                "transport",
+                "transportation",
+                "utilities",
+                "accessibility",
+            },
+        },
+        {
+            "name": "student_life",
+            "tokens": {
+                "student",
+                "students",
+                "hostel",
+                "hostels",
+                "residential",
+                "mess",
+                "dining",
+                "clubs",
+                "societies",
+                "welfare",
+                "activities",
+                "health",
+                "wellbeing",
+                "well",
+                "safety",
+                "security",
+            },
+        },
+        {
+            "name": "career_and_finance",
+            "tokens": {
+                "career",
+                "careers",
+                "placement",
+                "placements",
+                "internship",
+                "internships",
+                "recruitment",
+                "fees",
+                "finance",
+                "scholarships",
+                "fellowships",
+                "stipends",
+            },
+        },
+        {
+            "name": "administration_and_governance",
+            "tokens": {
+                "administration",
+                "administrative",
+                "governance",
+                "governing",
+                "registrar",
+                "office",
+                "offices",
+                "statutory",
+                "governance",
+            },
+        },
+        {
+            "name": "events_and_notices",
+            "tokens": {
+                "events",
+                "event",
+                "festivals",
+                "festival",
+                "seminars",
+                "seminar",
+                "workshops",
+                "conference",
+                "conferences",
+                "notice",
+                "notices",
+                "announcement",
+                "announcements",
+                "notification",
+            },
+        },
+    )
+
+    # ================================================================
+    # CONSTRUCTOR
+    # ================================================================
+
+    def __init__(
+        self,
+        organized_root: str | Path = (
+            "storage/organized_knowledge"
+        ),
+    ):
+        self.organized_root = Path(
+            organized_root
+        )
+
+    # ================================================================
+    # PUBLIC API
+    # ================================================================
+
+    def plan_domain(
+        self,
+        domain: str,
+    ) -> dict:
+
+        domain = (
+            domain or ""
+        ).strip()
+
+        if not domain:
+            raise ValueError(
+                "Domain cannot be empty."
+            )
+
+        domain_root = (
+            self.organized_root
+            / domain
+        )
+
+        manifest_path = (
+            domain_root
+            / "knowledge_units.json"
+        )
+
+        if not manifest_path.exists():
+            raise FileNotFoundError(
+                "Knowledge-unit manifest does not exist: "
+                f"{manifest_path}"
+            )
+
+        data = json.loads(
+            manifest_path.read_text(
+                encoding="utf-8"
+            )
+        )
+
+        units = data.get(
+            "units",
+            []
+        )
+
+        if not isinstance(
+            units,
+            list,
+        ):
+            raise ValueError(
+                "'units' must be a list."
+            )
+
+        # ------------------------------------------------------------
+        # VALIDATE INPUT UNITS
+        # ------------------------------------------------------------
+
+        useful_units = []
+
+        for unit in units:
+
+            if not isinstance(
+                unit,
+                dict,
+            ):
+                continue
+
+            decision = unit.get(
+                "decision",
+                "KEEP",
+            )
+
+            # Only explicit NOISE is excluded.
+            if decision == "NOISE":
+                continue
+
+            required = (
+                "unit_id",
+                "source_document",
+                "heading",
+                "text",
+            )
+
+            missing = [
+                field
+                for field in required
+                if not unit.get(field)
+            ]
+
+            if missing:
+                raise ValueError(
+                    "Knowledge unit is missing "
+                    f"{missing}: {unit}"
+                )
+
+            useful_units.append(
+                unit
+            )
+
+        if not useful_units:
+            raise ValueError(
+                f"No useful knowledge units found for "
+                f"{domain}."
+            )
+
+        # ------------------------------------------------------------
+        # INITIAL GROUPING
+        # ------------------------------------------------------------
+
+        groups = self._initial_groups(
+            useful_units
+        )
+
+        # ------------------------------------------------------------
+        # MERGE SMALL COMPATIBLE GROUPS
+        # ------------------------------------------------------------
+
+        groups = self._merge_small_groups(
+            groups
+        )
+
+        # ------------------------------------------------------------
+        # SPLIT ONLY GENUINELY HUGE GROUPS
+        # ------------------------------------------------------------
+
+        groups = self._split_large_groups(
+            groups
+        )
+
+        # ------------------------------------------------------------
+        # BUILD DOCUMENT PLANS
+        # ------------------------------------------------------------
+
+        documents = (
+            self._build_documents(
+                groups
+            )
+        )
+
+        # ------------------------------------------------------------
+        # COVERAGE VALIDATION
+        # ------------------------------------------------------------
+
+        self._validate_coverage(
+            input_units=useful_units,
+            documents=documents,
+        )
+
+        # ------------------------------------------------------------
+        # STATISTICS
+        # ------------------------------------------------------------
+
+        topic_counts = Counter()
+        taxonomy_counts = Counter()
+
+        for unit in useful_units:
+
+            topic_counts[
+                unit.get(
+                    "topic",
+                    "other",
+                )
+            ] += 1
+
+            taxonomy_key = (
+                self._taxonomy_key(
+                    unit
+                )
+            )
+
+            taxonomy_counts[
+                taxonomy_key
+            ] += 1
+
+        document_counts = {
+            document["document_id"]:
+                document["unit_count"]
+            for document in documents
+        }
+
+        # ------------------------------------------------------------
+        # PLAN
+        # ------------------------------------------------------------
+
+        plan = {
+            "version": "3.0",
+
+            "planner": (
+                "KnowledgeRAGPlanner"
+            ),
+
+            "strategy": (
+                "universal_taxonomy_driven_dynamic_grouping"
+            ),
+
+            "domain": domain,
+
+            "input_manifest": str(
+                manifest_path
+            ),
+
+            "input_units": len(
+                useful_units
+            ),
+
+            "rag_documents": len(
+                documents
+            ),
+
+            "document_count_is_dynamic": True,
+
+            "soft_document_range": {
+                "minimum": 20,
+                "maximum": 30,
+                "note": (
+                    "Advisory only. The planner does not "
+                    "force the dataset into this range."
+                ),
+            },
+
+            "grouping_rules": {
+                "semantic_coherence_first": True,
+                "taxonomy_category_primary": True,
+                "small_group_merge": True,
+                "large_group_split": True,
+                "review_preserved": True,
+                "no_llm": True,
+                "no_chunking": True,
+                "no_embedding": True,
+            },
+
+            "topic_counts": dict(
+                sorted(
+                    topic_counts.items()
+                )
+            ),
+
+            "taxonomy_counts": dict(
+                sorted(
+                    taxonomy_counts.items()
+                )
+            ),
+
+            "document_counts": (
+                document_counts
+            ),
+
+            "coverage": {
+                "input_units": len(
+                    useful_units
+                ),
+
+                "planned_units": sum(
+                    document[
+                        "unit_count"
+                    ]
+                    for document
+                    in documents
+                ),
+
+                "missing_units": 0,
+
+                "extra_units": 0,
+
+                "duplicate_units": 0,
+
+                "coverage_complete": True,
+            },
+
+            "documents": documents,
+        }
+
+        # ------------------------------------------------------------
+        # WRITE PLAN
+        # ------------------------------------------------------------
+
+        output_path = (
+            domain_root
+            / "rag_plan.json"
+        )
+
+        output_path.write_text(
+            json.dumps(
+                plan,
+                indent=4,
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+
+        # ------------------------------------------------------------
+        # LOG
+        # ------------------------------------------------------------
+
+        print()
+        print("=" * 100)
+        print(
+            "PHASE 8.4 — UNIVERSAL DYNAMIC RAG PLANNER"
+        )
+        print("=" * 100)
+
+        print(
+            "Domain:",
+            domain,
+        )
+
+        print(
+            "Input units:",
+            plan["input_units"],
+        )
+
+        print(
+            "RAG documents:",
+            plan["rag_documents"],
+        )
+
+        print(
+            "Coverage:",
+            (
+                "PASS"
+                if plan[
+                    "coverage"
+                ][
+                    "coverage_complete"
+                ]
+                else "FAIL"
+            ),
+        )
+
+        print()
+        print(
+            "RAG DOCUMENT PLAN"
+        )
+
+        for document in documents:
+
+            print(
+                f"{document['filename']:55}"
+                f" → "
+                f"{document['unit_count']:4} units"
+            )
+
+        print()
+        print(
+            "Plan:",
+            output_path,
+        )
+
+        return plan
+
+    # ================================================================
+    # INITIAL GROUPING
+    # ================================================================
+
+    def _initial_groups(
+        self,
+        units: list[dict],
+    ) -> dict[str, list[dict]]:
+
+        groups = defaultdict(list)
+
+        for unit in units:
+
+            taxonomy_domain = (
+                self._normalize(
+                    unit.get(
+                        "taxonomy_domain",
+                        unit.get(
+                            "topic",
+                            "other",
+                        ),
+                    )
+                )
+            )
+
+            taxonomy_category = (
+                self._normalize(
+                    unit.get(
+                        "taxonomy_category",
+                        unit.get(
+                            "subtopic",
+                            "other",
+                        ),
+                    )
+                )
+            )
+
+            # --------------------------------------------------------
+            # REVIEW IS SPECIAL.
+            #
+            # Preserve it separately.
+            # Later, the review groups can be split by any available
+            # domain hints without inventing a factual classification.
+            # --------------------------------------------------------
+
+            if taxonomy_domain == "review":
+
+                review_bucket = (
+                    self._review_bucket(
+                        unit
+                    )
+                )
+
+                groups[
+                    review_bucket
+                ].append(
+                    unit
+                )
+
+                continue
+
+            # --------------------------------------------------------
+            # NORMAL GROUP
+            # --------------------------------------------------------
+
+            domain_key = (
+                taxonomy_domain
+            )
+
+            category_key = (
+                taxonomy_category
+            )
+
+            groups[
+                f"{domain_key}__{category_key}"
+            ].append(
+                unit
+            )
+
+        return groups
+
+    # ================================================================
+    # REVIEW BUCKET
+    # ================================================================
+
+    def _review_bucket(
+        self,
+        unit: dict,
+    ) -> str:
+
+        # We never claim certainty here.
+        #
+        # We only use safe structural hints to avoid one gigantic
+        # review garbage drawer when the source already gives us
+        # meaningful domain context.
+        source_category = self._normalize(
+            unit.get(
+                "original_category",
+                "",
+            )
+        )
+
+        if source_category:
+            return (
+                "review__"
+                f"{source_category}"
+            )
+
+        return (
+            "review__general"
+        )
+
+    # ================================================================
+    # SMALL GROUP MERGING
+    # ================================================================
+
+    def _merge_small_groups(
+        self,
+        groups: dict[str, list[dict]],
+    ) -> dict[str, list[dict]]:
+
+        groups = {
+            key: list(value)
+            for key, value
+            in groups.items()
+        }
+
+        changed = True
+
+        while changed:
+
+            changed = False
+
+            small_keys = [
+                key
+                for key, value
+                in groups.items()
+                if len(value)
+                <= self.SMALL_GROUP_THRESHOLD
+                and not key.startswith(
+                    "review__"
+                )
+            ]
+
+            for small_key in small_keys:
+
+                if small_key not in groups:
+                    continue
+
+                candidate = (
+                    self._best_merge_target(
+                        small_key,
+                        groups,
+                    )
+                )
+
+                if candidate is None:
+                    continue
+
+                if candidate == small_key:
+                    continue
+
+                groups[
+                    candidate
+                ].extend(
+                    groups.pop(
+                        small_key
+                    )
+                )
+
+                changed = True
+
+                break
+
+        return groups
+
+    # ================================================================
+    # BEST MERGE TARGET
+    # ================================================================
+
+    def _best_merge_target(
+        self,
+        small_key: str,
+        groups: dict[str, list[dict]],
+    ) -> str | None:
+
+        small_domain, small_category = (
+            self._split_group_key(
+                small_key
+            )
+        )
+
+        if small_domain == "review":
+            return None
+
+        best_key = None
+        best_score = -1
+
+        for candidate_key, candidate_units in (
+            groups.items()
+        ):
+
+            if candidate_key == small_key:
+                continue
+
+            if candidate_key.startswith(
+                "review__"
+            ):
+                continue
+
+            candidate_domain, candidate_category = (
+                self._split_group_key(
+                    candidate_key
+                )
+            )
+
+            score = 0
+
+            # Same domain is the strongest generic signal.
+            if (
+                candidate_domain
+                == small_domain
+            ):
+                score += 100
+
+            # Generic category-family compatibility.
+            score += (
+                10
+                * self._category_family_similarity(
+                    small_category,
+                    candidate_category,
+                )
+            )
+
+            # Avoid merging unrelated domains just because
+            # one group is tiny.
+            if (
+                candidate_domain
+                != small_domain
+            ):
+                if (
+                    self._category_family_similarity(
+                        small_category,
+                        candidate_category,
+                    )
+                    < 2
+                ):
+                    continue
+
+            # Prefer reasonably populated existing groups.
+            score += min(
+                len(candidate_units),
+                20,
+            )
+
+            if score > best_score:
+                best_score = score
+                best_key = candidate_key
+
+        return best_key
+
+    # ================================================================
+    # LARGE GROUP SPLITTING
+    # ================================================================
+
+    def _split_large_groups(
+        self,
+        groups: dict[str, list[dict]],
+    ) -> dict[str, list[dict]]:
+
+        result = {}
+
+        for group_key, units in groups.items():
+
+            units = sorted(
+                units,
+                key=self._unit_sort_key,
+            )
+
+            # Small/normal groups remain intact.
+            if len(units) <= (
+                self.SOFT_LARGE_GROUP_THRESHOLD
+            ):
+                result[
+                    group_key
+                ] = units
+                continue
+
+            # --------------------------------------------------------
+            # First attempt:
+            # split by deeper taxonomy subcategory.
+            # --------------------------------------------------------
+
+            subgroups = defaultdict(list)
+
+            for unit in units:
+
+                subcategory = self._normalize(
+                    unit.get(
+                        "taxonomy_subcategory",
+                        unit.get(
+                            "taxonomy_category",
+                            "other",
+                        ),
+                    )
+                )
+
+                subgroups[
+                    subcategory
+                ].append(
+                    unit
+                )
+
+            # If meaningful subgroups exist, preserve them.
+            if len(subgroups) > 1:
+
+                split_successful = (
+                    self._add_category_groups(
+                        result=result,
+                        group_key=group_key,
+                        subgroups=subgroups,
+                    )
+                )
+
+                if split_successful:
+                    continue
+
+            # --------------------------------------------------------
+            # Second attempt:
+            # split deterministically using source-document groups.
+            # --------------------------------------------------------
+
+            document_groups = defaultdict(list)
+
+            for unit in units:
+
+                document_groups[
+                    unit.get(
+                        "source_document",
+                        "",
+                    )
+                ].append(
+                    unit
+                )
+
+            if len(document_groups) > 1:
+
+                chunks = self._pack_groups(
+                    list(
+                        document_groups.values()
+                    ),
+                    self.HARD_GROUP_THRESHOLD,
+                )
+
+                if len(chunks) > 1:
+
+                    for index, chunk in enumerate(
+                        chunks,
+                        start=1,
+                    ):
+
+                        result[
+                            self._numbered_name(
+                                group_key,
+                                index,
+                            )
+                        ] = [
+                            unit
+                            for subgroup
+                            in chunk
+                            for unit
+                            in subgroup
+                        ]
+
+                    continue
+
+            # --------------------------------------------------------
+            # Last-resort deterministic partition.
+            #
+            # This is only used when one homogeneous group is truly
+            # massive and has no natural document boundary.
+            # --------------------------------------------------------
+
+            chunks = self._chunk_units(
+                units,
+                self.HARD_GROUP_THRESHOLD,
+            )
+
+            if len(chunks) == 1:
+                result[
+                    group_key
+                ] = chunks[0]
+            else:
+                for index, chunk in enumerate(
+                    chunks,
+                    start=1,
+                ):
+                    result[
+                        self._numbered_name(
+                            group_key,
+                            index,
+                        )
+                    ] = chunk
+
+        return result
+
+    # ================================================================
+    # CATEGORY GROUPING
+    # ================================================================
+
+    def _add_category_groups(
+        self,
+        *,
+        result: dict[str, list[dict]],
+        group_key: str,
+        subgroups: dict[str, list[dict]],
+    ) -> bool:
+
+        meaningful = [
+            (
+                key,
+                sorted(
+                    value,
+                    key=self._unit_sort_key,
+                ),
+            )
+            for key, value
+            in subgroups.items()
+            if value
+        ]
+
+        if len(meaningful) <= 1:
+            return False
+
+        # If one subcategory is enormous, leave it for the hard split
+        # logic instead of pretending the split solved the problem.
+        if any(
+            len(units)
+            > self.HARD_GROUP_THRESHOLD
+            for _, units
+            in meaningful
+        ):
+            return False
+
+        for subcategory, units in meaningful:
+
+            safe_subcategory = self._normalize(
+                subcategory
+            )
+
+            result[
+                f"{group_key}__{safe_subcategory}"
+            ] = units
+
+        return True
+
+    # ================================================================
+    # PACK SOURCE GROUPS
+    # ================================================================
+
+    def _pack_groups(
+        self,
+        groups: list[list[dict]],
+        limit: int,
+    ) -> list[list[list[dict]]]:
+
+        groups = sorted(
+            groups,
+            key=lambda g: (
+                -len(g),
+                self._unit_sort_key(
+                    g[0]
+                )
+                if g
+                else (
+                    "",
+                    0,
+                    0,
+                ),
+            ),
+        )
+
+        packed = []
+
+        current = []
+        current_count = 0
+
+        for group in groups:
+
+            size = len(group)
+
+            if (
+                current
+                and current_count + size > limit
+            ):
+                packed.append(
+                    current
+                )
+
+                current = []
+                current_count = 0
+
+            current.append(
+                group
+            )
+
+            current_count += size
+
+        if current:
+            packed.append(
+                current
+            )
+
+        return packed
+
+    # ================================================================
+    # BUILD DOCUMENT OBJECTS
+    # ================================================================
+
+    def _build_documents(
+        self,
+        groups: dict[str, list[dict]],
+    ) -> list[dict]:
+
+        documents = []
+
+        for group_key in sorted(
+            groups.keys()
+        ):
+
+            units = sorted(
+                groups[group_key],
+                key=self._unit_sort_key,
+            )
+
+            domain, category = (
+                self._split_group_key(
+                    group_key
+                )
+            )
+
+            title = (
+                self._document_title(
+                    group_key
+                )
+            )
+
+            topics = sorted(
+                {
+                    unit.get(
+                        "topic",
+                        "other",
+                    )
+                    for unit in units
+                }
+            )
+
+            taxonomy_categories = sorted(
+                {
+                    self._taxonomy_key(
+                        unit
+                    )
+                    for unit in units
+                }
+            )
+
+            source_documents = sorted(
+                {
+                    unit[
+                        "source_document"
+                    ]
+                    for unit in units
+                }
+            )
+
+            documents.append(
+                {
+                    "document_id": group_key,
+
+                    "filename": (
+                        f"{group_key}.docx"
+                    ),
+
+                    "title": title,
+
+                    "domain": domain,
+
+                    "category": category,
+
+                    "topics": topics,
+
+                    "taxonomy_categories": (
+                        taxonomy_categories
+                    ),
+
+                    "source_documents": (
+                        source_documents
+                    ),
+
+                    "unit_count": len(
+                        units
+                    ),
+
+                    "units": units,
+                }
+            )
+
+        return documents
+
+    # ================================================================
+    # DOCUMENT TITLE
+    # ================================================================
+
+    def _document_title(
+        self,
+        group_key: str,
+    ) -> str:
+
+        parts = group_key.split(
+            "__"
+        )
+
+        cleaned = []
+
+        for part in parts:
+
+            if part.startswith(
+                "review_"
+            ):
+                part = part.replace(
+                    "review_",
+                    "",
+                )
+
+            cleaned.append(
+                part
+            )
+
+        value = " — ".join(
+            cleaned
+        )
+
+        value = re.sub(
+            r"[_\-]+",
+            " ",
+            value,
+        )
+
+        value = re.sub(
+            r"\s+",
+            " ",
+            value,
+        )
+
+        return value.strip().title()
+
+    # ================================================================
+    # TAXONOMY KEY
+    # ================================================================
+
+    def _taxonomy_key(
+        self,
+        unit: dict,
+    ) -> str:
+
+        domain = self._normalize(
+            unit.get(
+                "taxonomy_domain",
+                unit.get(
+                    "topic",
+                    "other",
+                ),
+            )
+        )
+
+        category = self._normalize(
+            unit.get(
+                "taxonomy_category",
+                unit.get(
+                    "subtopic",
+                    "other",
+                ),
+            )
+        )
+
+        subcategory = self._normalize(
+            unit.get(
+                "taxonomy_subcategory",
+                category,
+            )
+        )
+
+        return (
+            f"{domain}/"
+            f"{category}/"
+            f"{subcategory}"
+        )
+
+    # ================================================================
+    # CATEGORY FAMILY SIMILARITY
+    # ================================================================
+
+    def _category_family_similarity(
+        self,
+        category_a: str,
+        category_b: str,
+    ) -> int:
+
+        tokens_a = set(
+            category_a.split("_")
+        )
+
+        tokens_b = set(
+            category_b.split("_")
+        )
+
+        score = 0
+
+        for family in (
+            self.CATEGORY_FAMILIES
+        ):
+
+            a_match = bool(
+                tokens_a
+                & family["tokens"]
+            )
+
+            b_match = bool(
+                tokens_b
+                & family["tokens"]
+            )
+
+            if a_match and b_match:
+                score += 1
+
+        score += len(
+            tokens_a & tokens_b
+        )
+
+        return score
+
+    # ================================================================
+    # GROUP KEY PARSING
+    # ================================================================
+
+    def _split_group_key(
+        self,
+        group_key: str,
+    ) -> tuple[str, str]:
+
+        parts = group_key.split(
+            "__",
+            1,
+        )
+
+        if len(parts) == 1:
+            return (
+                parts[0],
+                "general",
+            )
+
+        return (
+            parts[0],
+            parts[1],
+        )
+
+    # ================================================================
+    # NUMBERED GROUP NAME
+    # ================================================================
+
+    def _numbered_name(
+        self,
+        base: str,
+        index: int,
+    ) -> str:
+
+        return (
+            f"{base}__"
+            f"{index:02d}"
+        )
+
+    # ================================================================
+    # CHUNK UNITS
+    # ================================================================
+
+    def _chunk_units(
+        self,
+        units: list[dict],
+        limit: int,
+    ) -> list[list[dict]]:
+
+        units = sorted(
+            units,
+            key=self._unit_sort_key,
+        )
+
+        return [
+            units[
+                start:
+                start + limit
+            ]
+            for start in range(
+                0,
+                len(units),
+                limit,
+            )
+        ]
+
+    # ================================================================
+    # UNIT SORT
+    # ================================================================
+
+    def _unit_sort_key(
+        self,
+        unit: dict,
+    ) -> tuple:
+
+        try:
+            page_index = int(
+                unit.get(
+                    "page_index",
+                    0,
+                )
+            )
+        except (
+            TypeError,
+            ValueError,
+        ):
+            page_index = 0
+
+        try:
+            section_index = int(
+                unit.get(
+                    "section_index",
+                    0,
+                )
+            )
+        except (
+            TypeError,
+            ValueError,
+        ):
+            section_index = 0
+
+        return (
+            unit.get(
+                "source_document",
+                "",
+            ),
+            page_index,
+            section_index,
+        )
+
+    # ================================================================
+    # NORMALIZATION
+    # ================================================================
+
+    def _normalize(
+        self,
+        value: str,
+    ) -> str:
+
+        value = (
+            value or ""
+        ).strip().lower()
+
+        value = re.sub(
+            r"[^a-z0-9]+",
+            "_",
+            value,
+        )
+
+        value = re.sub(
+            r"_+",
+            "_",
+            value,
+        )
+
+        return (
+            value.strip("_")
+            or "other"
+        )
+
+    # ================================================================
+    # COVERAGE VALIDATION
+    # ================================================================
+
+    def _validate_coverage(
+        self,
+        *,
+        input_units: list[dict],
+        documents: list[dict],
+    ) -> None:
+
+        input_ids = [
+            unit["unit_id"]
+            for unit in input_units
+        ]
+
+        planned_ids = [
+            unit["unit_id"]
+            for document
+            in documents
+            for unit
+            in document["units"]
+        ]
+
+        duplicate_input = (
+            self._duplicates(
+                input_ids
+            )
+        )
+
+        duplicate_planned = (
+            self._duplicates(
+                planned_ids
+            )
+        )
+
+        if duplicate_input:
+            raise ValueError(
+                "Duplicate input knowledge-unit IDs: "
+                f"{duplicate_input}"
+            )
+
+        if duplicate_planned:
+            raise ValueError(
+                "Duplicate planned knowledge-unit IDs: "
+                f"{duplicate_planned}"
+            )
+
+        missing = sorted(
+            set(input_ids)
+            - set(planned_ids)
+        )
+
+        extra = sorted(
+            set(planned_ids)
+            - set(input_ids)
+        )
+
+        if missing:
+            raise ValueError(
+                "Knowledge units were lost during "
+                f"RAG planning: {missing}"
+            )
+
+        if extra:
+            raise ValueError(
+                "RAG plan contains unknown knowledge "
+                f"units: {extra}"
+            )
+
+        if len(input_ids) != len(
+            planned_ids
+        ):
+            raise ValueError(
+                "RAG plan coverage mismatch."
+            )
+
+    # ================================================================
+    # DUPLICATES
+    # ================================================================
+
+    def _duplicates(
+        self,
+        values: list[str],
+    ) -> list[str]:
+
+        seen = set()
+        duplicate = set()
+
+        for value in values:
+
+            if value in seen:
+                duplicate.add(
+                    value
+                )
+
+            seen.add(
+                value
+            )
+
+        return sorted(
+            duplicate
+        )
+
+
+if __name__ == "__main__":
+
+    print(
+        "KnowledgeRAGPlanner"
+    )
+
+    print(
+        "Phase 8.4 — Universal Dynamic RAG Planner"
+    )

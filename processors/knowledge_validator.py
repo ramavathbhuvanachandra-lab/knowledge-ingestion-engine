@@ -249,7 +249,6 @@ class KnowledgeValidator:
         )
 
         if not title:
-
             warnings.append(
                 "Metadata does not contain a title"
             )

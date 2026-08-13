@@ -1,0 +1,658 @@
+"""
+Phase 8.3 — Deterministic Knowledge Organization.
+
+Responsibilities:
+- Read canonical knowledge Markdown.
+- Parse knowledge sections.
+- Preserve KEEP and REVIEW.
+- Exclude only explicit NOISE.
+- Apply the deterministic master taxonomy.
+- Preserve original text exactly.
+- Preserve source-line provenance.
+- Write organized Markdown.
+- Write knowledge_units.json.
+
+No LLM.
+No chunking.
+No embeddings.
+No vector database.
+No summarization.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+import json
+import re
+import shutil
+
+from processors.knowledge_taxonomy import classify
+
+
+class KnowledgeOrganizer:
+    def __init__(
+        self,
+        output_path: str | Path = "storage/organized_knowledge",
+        organized_root: str | Path | None = None,
+    ):
+        # Keep compatibility with both names used by the project.
+        root = (
+            organized_root
+            if organized_root is not None
+            else output_path
+        )
+
+        self.output_path = Path(root)
+
+        self.noise_headings = {
+            "search here",
+            "accessibility options",
+            "accessibility",
+            "menu",
+            "navigation",
+            "quick access",
+            "quick links",
+            "important links",
+            "useful links",
+        }
+
+        self.noise_patterns = (
+            "accessibility options",
+            "created by",
+            "arrow_downward",
+        )
+
+    # ------------------------------------------------------------------
+    # PUBLIC API
+    # ------------------------------------------------------------------
+
+    def organize(self, markdown_path: str | Path) -> dict:
+        markdown_path = Path(markdown_path)
+
+        if not markdown_path.exists():
+            raise FileNotFoundError(
+                f"Knowledge Markdown does not exist: {markdown_path}"
+            )
+
+        content = markdown_path.read_text(
+            encoding="utf-8"
+        )
+
+        domain = self._extract_domain(
+            markdown_path,
+            content,
+        )
+
+        sections = self._parse_sections(content)
+
+        units = []
+        written_files = []
+
+        category_counts = {}
+
+        for section_index, section in enumerate(sections):
+            decision = section["decision"]
+
+            # Explicit NOISE is the ONLY content excluded.
+            if decision == "NOISE":
+                continue
+
+            classification = classify(
+                heading=section["heading"],
+                text=section["text"],
+                source_name=markdown_path.name,
+            )
+
+            unit = {
+                "unit_id": self._unit_id(
+                    markdown_path,
+                    section_index,
+                ),
+                "source_document": str(
+                    markdown_path
+                ),
+                "source_document_name": markdown_path.name,
+                "domain": domain,
+                "heading": section["heading"],
+                "level": section["level"],
+                "text": section["text"],
+                "start_line": section["start_line"],
+                "end_line": section["end_line"],
+                "decision": decision,
+
+                "taxonomy_domain": classification["domain"],
+                "taxonomy_category": classification["category"],
+                "taxonomy_subcategory": classification["subcategory"],
+                "classification_confidence": classification[
+                    "confidence"
+                ],
+                "classification_score": classification[
+                    "score"
+                ],
+            }
+
+            units.append(unit)
+
+            bucket = (
+                classification["domain"],
+                classification["category"],
+                classification["subcategory"],
+            )
+
+            category_counts["/".join(bucket)] = (
+                category_counts.get(
+                    "/".join(bucket),
+                    0,
+                )
+                + 1
+            )
+
+        # Write per-document organized Markdown.
+        grouped = {}
+
+        for unit in units:
+            key = (
+                unit["taxonomy_domain"],
+                unit["taxonomy_category"],
+                unit["taxonomy_subcategory"],
+            )
+
+            grouped.setdefault(
+                key,
+                [],
+            ).append(unit)
+
+        domain_root = (
+            self.output_path / domain
+        )
+
+        domain_root.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+
+        for (
+            taxonomy_domain,
+            taxonomy_category,
+            taxonomy_subcategory,
+        ), group_units in sorted(
+            grouped.items()
+        ):
+            output_dir = (
+                domain_root
+                / self._safe_name(
+                    taxonomy_domain
+                )
+                / self._safe_name(
+                    taxonomy_category
+                )
+            )
+
+            output_dir.mkdir(
+                parents=True,
+                exist_ok=True,
+            )
+
+            output_file = (
+                output_dir
+                / f"{self._safe_name(taxonomy_subcategory)}.md"
+            )
+
+            self._write_group_file(
+                output_file=output_file,
+                domain=domain,
+                taxonomy_domain=taxonomy_domain,
+                taxonomy_category=taxonomy_category,
+                taxonomy_subcategory=taxonomy_subcategory,
+                source_document=markdown_path,
+                units=group_units,
+            )
+
+            written_files.append(
+                str(output_file)
+            )
+
+        manifest = {
+            "phase": "8.3",
+            "source_document": str(
+                markdown_path
+            ),
+            "domain": domain,
+            "total_sections": len(sections),
+            "noise_sections": sum(
+                1
+                for section in sections
+                if section["decision"] == "NOISE"
+            ),
+            "organized_sections": len(units),
+            "review_sections": sum(
+                1
+                for unit in units
+                if unit["taxonomy_domain"] == "review"
+            ),
+            "categories": category_counts,
+            "written_files": written_files,
+            "units": units,
+        }
+
+        manifest_path = (
+            domain_root
+            / f"{markdown_path.stem}.organization.json"
+        )
+
+        manifest_path.write_text(
+            json.dumps(
+                manifest,
+                indent=2,
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+
+        return manifest
+
+    # ------------------------------------------------------------------
+    # SECTION PARSING
+    # ------------------------------------------------------------------
+
+    def _parse_sections(
+        self,
+        content: str,
+    ) -> list[dict]:
+        lines = content.splitlines()
+
+        sections = []
+
+        current = None
+        pending_decision = None
+
+        for line_number, line in enumerate(
+            lines,
+            start=1,
+        ):
+            decision_marker = self._parse_decision(
+                line
+            )
+
+            if decision_marker:
+                pending_decision = decision_marker
+
+                if current is not None:
+                    current["end_line"] = (
+                        line_number - 1
+                    )
+
+                continue
+
+            heading_match = re.match(
+                r"^(#{1,6})\s+(.+?)\s*$",
+                line,
+            )
+
+            if heading_match:
+                if current is not None:
+                    current["end_line"] = (
+                        line_number - 1
+                    )
+
+                    self._finalize_section(
+                        sections,
+                        current,
+                    )
+
+                level = len(
+                    heading_match.group(1)
+                )
+
+                heading = (
+                    heading_match.group(2)
+                    .strip()
+                )
+
+                current = {
+                    "heading": heading,
+                    "level": level,
+                    "lines": [],
+                    "start_line": line_number,
+                    "end_line": line_number,
+                    "decision": (
+                        pending_decision
+                        or self._infer_decision_from_heading(
+                            heading
+                        )
+                    ),
+                }
+
+                pending_decision = None
+
+                continue
+
+            if current is None:
+                # Ignore only empty preamble.
+                if line.strip():
+                    current = {
+                        "heading": "Document Overview",
+                        "level": 1,
+                        "lines": [],
+                        "start_line": line_number,
+                        "end_line": line_number,
+                        "decision": (
+                            pending_decision
+                            or "KEEP"
+                        ),
+                    }
+
+                    pending_decision = None
+
+            if current is not None:
+                current["lines"].append(line)
+                current["end_line"] = line_number
+
+        if current is not None:
+            self._finalize_section(
+                sections,
+                current,
+            )
+
+        return sections
+
+    def _finalize_section(
+        self,
+        sections: list[dict],
+        section: dict,
+    ) -> None:
+        text = "\n".join(
+            section["lines"]
+        ).strip()
+
+        heading = section["heading"]
+
+        decision = section["decision"]
+
+        # Conservative noise detection.
+        if self._is_noise_heading(
+            heading
+        ) or self._is_noise_content(
+            text
+        ):
+            decision = "NOISE"
+
+        if not text:
+            return
+
+        sections.append(
+            {
+                "heading": heading,
+                "level": section["level"],
+                "text": text,
+                "start_line": section["start_line"],
+                "end_line": section["end_line"],
+                "decision": decision,
+            }
+        )
+
+    # ------------------------------------------------------------------
+    # DECISION
+    # ------------------------------------------------------------------
+
+    def _parse_decision(
+        self,
+        line: str,
+    ) -> str | None:
+        value = line.strip().upper()
+
+        if value in (
+            "[KEEP]",
+            "KEEP",
+            "<KEEP>",
+        ):
+            return "KEEP"
+
+        if value in (
+            "[REVIEW]",
+            "REVIEW",
+            "<REVIEW>",
+        ):
+            return "REVIEW"
+
+        if value in (
+            "[NOISE]",
+            "NOISE",
+            "<NOISE>",
+        ):
+            return "NOISE"
+
+        return None
+
+    def _infer_decision_from_heading(
+        self,
+        heading: str,
+    ) -> str:
+        normalized = self._normalize(
+            heading
+        )
+
+        if normalized in self.noise_headings:
+            return "NOISE"
+
+        return "KEEP"
+
+    def _is_noise_heading(
+        self,
+        heading: str,
+    ) -> bool:
+        normalized = self._normalize(
+            heading
+        )
+
+        return normalized in self.noise_headings
+
+    def _is_noise_content(
+        self,
+        text: str,
+    ) -> bool:
+        normalized = self._normalize(
+            text
+        )
+
+        if not normalized:
+            return True
+
+        # Do NOT classify a document as noise just because
+        # it contains one common UI word.
+        for pattern in self.noise_patterns:
+            if normalized == self._normalize(
+                pattern
+            ):
+                return True
+
+        return False
+
+    # ------------------------------------------------------------------
+    # DOMAIN
+    # ------------------------------------------------------------------
+
+    def _extract_domain(
+        self,
+        markdown_path: Path,
+        content: str,
+    ) -> str:
+        match = re.search(
+            r"\*\*Domain:\*\*\s*(.+)",
+            content,
+            flags=re.IGNORECASE,
+        )
+
+        if match:
+            value = self._safe_name(
+                match.group(1)
+            )
+
+            if value:
+                return value
+
+        parts = markdown_path.parts
+
+        # storage/knowledge/<domain>/...
+        for marker in (
+            "knowledge",
+            "structured_knowledge",
+            "output",
+        ):
+            try:
+                index = parts.index(
+                    marker
+                )
+
+                if index + 1 < len(parts):
+                    candidate = self._safe_name(
+                        parts[index + 1]
+                    )
+
+                    if candidate:
+                        return candidate
+
+            except ValueError:
+                continue
+
+        return "unknown"
+
+    # ------------------------------------------------------------------
+    # WRITING
+    # ------------------------------------------------------------------
+
+    def _write_group_file(
+        self,
+        *,
+        output_file: Path,
+        domain: str,
+        taxonomy_domain: str,
+        taxonomy_category: str,
+        taxonomy_subcategory: str,
+        source_document: Path,
+        units: list[dict],
+    ) -> None:
+        lines = [
+            f"# {self._display(taxonomy_subcategory)}",
+            "",
+            f"**Domain:** {domain}",
+            f"**Taxonomy Domain:** {taxonomy_domain}",
+            f"**Taxonomy Category:** {taxonomy_category}",
+            f"**Taxonomy Subcategory:** {taxonomy_subcategory}",
+            f"**Source Document:** {source_document.name}",
+            "",
+            "---",
+            "",
+        ]
+
+        for unit in units:
+            lines.extend(
+                [
+                    f"## {unit['heading']}",
+                    "",
+                    unit["text"],
+                    "",
+                    "---",
+                    "",
+                    (
+                        "<!-- "
+                        f"Unit ID: {unit['unit_id']} | "
+                        f"Source lines: "
+                        f"{unit['start_line']}-"
+                        f"{unit['end_line']} | "
+                        f"Decision: {unit['decision']} | "
+                        f"Classification: "
+                        f"{unit['taxonomy_domain']}/"
+                        f"{unit['taxonomy_category']}/"
+                        f"{unit['taxonomy_subcategory']}"
+                        " -->"
+                    ),
+                    "",
+                ]
+            )
+
+        output_file.write_text(
+            "\n".join(lines),
+            encoding="utf-8",
+        )
+
+    # ------------------------------------------------------------------
+    # HELPERS
+    # ------------------------------------------------------------------
+
+    def _unit_id(
+        self,
+        markdown_path: Path,
+        index: int,
+    ) -> str:
+        import hashlib
+
+        raw = (
+            f"{markdown_path.resolve()}::{index}"
+        )
+
+        return hashlib.sha1(
+            raw.encode("utf-8")
+        ).hexdigest()[:16]
+
+    def _normalize(
+        self,
+        value: str,
+    ) -> str:
+        value = (
+            value or ""
+        ).strip().lower()
+
+        value = re.sub(
+            r"[^a-z0-9]+",
+            " ",
+            value,
+        )
+
+        return re.sub(
+            r"\s+",
+            " ",
+            value,
+        ).strip()
+
+    def _safe_name(
+        self,
+        value: str,
+    ) -> str:
+        value = (
+            value or ""
+        ).strip().lower()
+
+        value = re.sub(
+            r"[^a-z0-9._-]+",
+            "_",
+            value,
+        )
+
+        value = re.sub(
+            r"_+",
+            "_",
+            value,
+        )
+
+        return (
+            value.strip("._-")
+            or "unknown"
+        )
+
+    def _display(
+        self,
+        value: str,
+    ) -> str:
+        return (
+            value
+            .replace("_", " ")
+            .title()
+        )
+
+
+if __name__ == "__main__":
+    print(
+        "KnowledgeOrganizer is a pipeline processor. "
+        "Use organize(markdown_path)."
+    )

@@ -1,0 +1,2025 @@
+"""
+Phase 8.4 — Dynamic RAG Document Planner
+
+Input
+-----
+storage/organized_knowledge/<domain>/knowledge_units.json
+
+Output
+------
+storage/organized_knowledge/<domain>/rag_plan.json
+
+Purpose
+-------
+Convert detailed 8.3 taxonomy buckets into a manageable, dynamic set
+of large RAG documents.
+
+Important
+---------
+This phase DOES NOT:
+- use an LLM
+- summarize
+- rewrite knowledge
+- chunk
+- embed
+- create vectors
+- create DOCX
+
+It ONLY:
+- groups knowledge units
+- preserves provenance
+- preserves hierarchy
+- guarantees zero useful-unit loss
+- dynamically determines the final document set
+
+Design
+------
+8.3 has a detailed taxonomy.
+
+8.4 deliberately has a coarser document-family layer.
+
+Therefore:
+
+    taxonomy category
+            ↓
+    document family
+            ↓
+    final RAG document
+
+The final document count is NOT fixed.
+20-30 is a practical target range, not a hard constraint.
+"""
+
+
+from __future__ import annotations
+
+from collections import defaultdict
+from pathlib import Path
+import json
+import re
+
+
+class KnowledgeRAGPlanner:
+
+    # ==================================================================
+    # DOCUMENT FAMILY DEFINITIONS
+    # ==================================================================
+    #
+    # These are NOT mandatory final files.
+    #
+    # They are deterministic grouping families used to combine related
+    # taxonomy categories.
+    #
+    # A family is only created when actual knowledge populates it.
+    #
+    # Large families may later be split using _split_large_family().
+    # Small families may be merged using _merge_small_families().
+    # ==================================================================
+
+    FAMILY_RULES = {
+
+        # --------------------------------------------------------------
+        # 01 INSTITUTE OVERVIEW
+        # --------------------------------------------------------------
+
+        "institute_overview": {
+            "title": "Institute Overview",
+
+            "categories": {
+                (
+                    "campus",
+                    "campus_overview",
+                ),
+
+                (
+                    "institutes_centres_and_units",
+                    "centre_overview",
+                ),
+
+                (
+                    "institutes_centres_and_units",
+                    "institutes",
+                ),
+            },
+        },
+
+        # --------------------------------------------------------------
+        # 02 CAMPUS / INFRASTRUCTURE
+        # --------------------------------------------------------------
+
+        "campus_and_infrastructure": {
+            "title": "Campus and Infrastructure",
+
+            "categories": {
+                (
+                    "campus",
+                    "locations_and_directions",
+                ),
+
+                (
+                    "campus",
+                    "buildings_and_spaces",
+                ),
+
+                (
+                    "campus",
+                    "transportation",
+                ),
+
+                (
+                    "campus",
+                    "utilities_and_services",
+                ),
+
+                (
+                    "campus",
+                    "accessibility",
+                ),
+
+                (
+                    "facilities_and_infrastructure",
+                    "specialized_facilities",
+                ),
+
+                (
+                    "facilities_and_infrastructure",
+                    "utilities_and_services",
+                ),
+
+                (
+                    "facilities_and_infrastructure",
+                    "classrooms_and_academic_spaces",
+                ),
+
+                (
+                    "facilities_and_infrastructure",
+                    "auditoriums_and_conference_spaces",
+                ),
+
+                (
+                    "facilities_and_infrastructure",
+                    "computing_and_digital_facilities",
+                ),
+            },
+        },
+
+        # --------------------------------------------------------------
+        # 03 LABORATORIES / WORKSHOPS
+        # --------------------------------------------------------------
+
+        "laboratories_and_workshops": {
+            "title": "Laboratories and Workshops",
+
+            "categories": {
+                (
+                    "facilities_and_infrastructure",
+                    "laboratories",
+                ),
+
+                (
+                    "facilities_and_infrastructure",
+                    "workshops",
+                ),
+            },
+        },
+
+        # --------------------------------------------------------------
+        # 04 LIBRARY / LEARNING FACILITIES
+        # --------------------------------------------------------------
+
+        "library_and_learning_facilities": {
+            "title": "Library and Learning Facilities",
+
+            "categories": {
+                (
+                    "facilities_and_infrastructure",
+                    "libraries",
+                ),
+            },
+        },
+
+        # --------------------------------------------------------------
+        # 05 ACADEMIC PROGRAMS
+        # --------------------------------------------------------------
+
+        "academic_programs": {
+            "title": "Academic Programs",
+
+            "categories": {
+                (
+                    "academics",
+                    "programs",
+                ),
+
+                (
+                    "admissions",
+                    "admission_overview",
+                ),
+
+                (
+                    "admissions",
+                    "eligibility",
+                ),
+
+                (
+                    "admissions",
+                    "entrance_examinations",
+                ),
+            },
+        },
+
+        # --------------------------------------------------------------
+        # 06 DEPARTMENTS / SCHOOLS
+        # --------------------------------------------------------------
+
+        "departments_and_schools": {
+            "title": "Departments and Schools",
+
+            "categories": {
+                (
+                    "academics",
+                    "departments_and_schools",
+                ),
+            },
+        },
+
+        # --------------------------------------------------------------
+        # 07 CURRICULUM / REGISTRATION
+        # --------------------------------------------------------------
+
+        "curriculum_and_registration": {
+            "title": "Curriculum and Registration",
+
+            "categories": {
+                (
+                    "academics",
+                    "courses_and_curriculum",
+                ),
+
+                (
+                    "academics",
+                    "registration_and_enrolment",
+                ),
+
+                (
+                    "academics",
+                    "academic_forms",
+                ),
+            },
+        },
+
+        # --------------------------------------------------------------
+        # 08 EXAMS / CALENDAR / PROGRESS
+        # --------------------------------------------------------------
+
+        "academic_calendar_and_evaluation": {
+            "title": "Academic Calendar and Evaluation",
+
+            "categories": {
+                (
+                    "academics",
+                    "academic_calendar",
+                ),
+
+                (
+                    "academics",
+                    "examinations_and_evaluation",
+                ),
+
+                (
+                    "academics",
+                    "attendance_and_academic_progress",
+                ),
+
+                (
+                    "academics",
+                    "transcripts_and_certificates",
+                ),
+            },
+        },
+
+        # --------------------------------------------------------------
+        # 09 ACADEMIC RULES
+        # --------------------------------------------------------------
+
+        "academic_rules_and_regulations": {
+            "title": "Academic Rules and Regulations",
+
+            "categories": {
+                (
+                    "academics",
+                    "academic_rules_and_regulations",
+                ),
+
+                (
+                    "rules_policies_and_regulations",
+                    "academic_regulations",
+                ),
+            },
+        },
+
+        # --------------------------------------------------------------
+        # 10 RESEARCH AREAS / GROUPS
+        # --------------------------------------------------------------
+
+        "research_areas_and_groups": {
+            "title": "Research Areas and Groups",
+
+            "categories": {
+                (
+                    "research",
+                    "research_areas",
+                ),
+
+                (
+                    "research",
+                    "research_groups",
+                ),
+            },
+        },
+
+        # --------------------------------------------------------------
+        # 11 RESEARCH PROJECTS
+        # --------------------------------------------------------------
+
+        "research_projects": {
+            "title": "Research Projects",
+
+            "categories": {
+                (
+                    "research",
+                    "research_projects",
+                ),
+            },
+        },
+
+        # --------------------------------------------------------------
+        # 12 RESEARCH CENTRES / LABS
+        # --------------------------------------------------------------
+
+        "research_centres_and_labs": {
+            "title": "Research Centres and Laboratories",
+
+            "categories": {
+                (
+                    "research",
+                    "research_centres_and_centers",
+                ),
+
+                (
+                    "research",
+                    "research_laboratories",
+                ),
+
+                (
+                    "institutes_centres_and_units",
+                    "special_units",
+                ),
+            },
+        },
+
+        # --------------------------------------------------------------
+        # 13 RESEARCH OUTPUT / INNOVATION
+        # --------------------------------------------------------------
+
+        "research_outputs_and_innovation": {
+            "title": "Research Outputs and Innovation",
+
+            "categories": {
+                (
+                    "research",
+                    "publications",
+                ),
+
+                (
+                    "research",
+                    "patents_and_innovation",
+                ),
+
+                (
+                    "research",
+                    "research_funding_and_grants",
+                ),
+
+                (
+                    "research",
+                    "research_collaborations",
+                ),
+            },
+        },
+
+        # --------------------------------------------------------------
+        # 14 PEOPLE
+        # --------------------------------------------------------------
+
+        "people_and_leadership": {
+            "title": "People and Leadership",
+
+            "categories": {
+                (
+                    "people",
+                    "faculty",
+                ),
+
+                (
+                    "people",
+                    "researchers",
+                ),
+
+                (
+                    "people",
+                    "staff",
+                ),
+
+                (
+                    "people",
+                    "leadership",
+                ),
+
+                (
+                    "people",
+                    "position_holders",
+                ),
+
+                (
+                    "people",
+                    "committees_and_boards",
+                ),
+            },
+        },
+
+        # --------------------------------------------------------------
+        # 15 CONTACTS
+        # --------------------------------------------------------------
+
+        "contacts_and_directory": {
+            "title": "Contacts and Directory",
+
+            "categories": {
+                (
+                    "people",
+                    "contact_directory",
+                ),
+
+                (
+                    "contacts_and_directory",
+                    "general_contacts",
+                ),
+
+                (
+                    "contacts_and_directory",
+                    "office_directory",
+                ),
+
+                (
+                    "contacts_and_directory",
+                    "emergency_contacts",
+                ),
+            },
+        },
+
+        # --------------------------------------------------------------
+        # 16 HOSTELS / FOOD / STUDENT LIFE
+        # --------------------------------------------------------------
+
+        "student_residential_life": {
+            "title": "Student Residential Life",
+
+            "categories": {
+                (
+                    "hostels",
+                    "accommodation",
+                ),
+
+                (
+                    "hostels",
+                    "hostel_rules",
+                ),
+
+                (
+                    "hostels",
+                    "hostel_fees",
+                ),
+
+                (
+                    "hostels",
+                    "hostel_facilities",
+                ),
+
+                (
+                    "hostels",
+                    "hostel_allocation_and_application",
+                ),
+
+                (
+                    "hostels",
+                    "hostel_contacts",
+                ),
+
+                (
+                    "food_and_dining",
+                    "mess_and_dining",
+                ),
+
+                (
+                    "food_and_dining",
+                    "cafeterias_and_food_outlets",
+                ),
+
+                (
+                    "food_and_dining",
+                    "food_services_and_rules",
+                ),
+            },
+        },
+
+        # --------------------------------------------------------------
+        # 17 STUDENT LIFE / WELFARE
+        # --------------------------------------------------------------
+
+        "student_life_and_welfare": {
+            "title": "Student Life and Welfare",
+
+            "categories": {
+                (
+                    "student_life",
+                    "student_services",
+                ),
+
+                (
+                    "student_life",
+                    "student_welfare",
+                ),
+
+                (
+                    "student_life",
+                    "clubs_and_societies",
+                ),
+
+                (
+                    "student_life",
+                    "student_activities",
+                ),
+
+                (
+                    "student_life",
+                    "student_opportunities",
+                ),
+
+                (
+                    "student_life",
+                    "grievances_and_support",
+                ),
+
+                (
+                    "health_safety_and_wellbeing",
+                    "counselling_and_mental_wellbeing",
+                ),
+            },
+        },
+
+        # --------------------------------------------------------------
+        # 18 HEALTH / SAFETY
+        # --------------------------------------------------------------
+
+        "health_safety_and_wellbeing": {
+            "title": "Health, Safety and Wellbeing",
+
+            "categories": {
+                (
+                    "health_safety_and_wellbeing",
+                    "medical_services",
+                ),
+
+                (
+                    "health_safety_and_wellbeing",
+                    "emergency_services",
+                ),
+
+                (
+                    "health_safety_and_wellbeing",
+                    "security",
+                ),
+
+                (
+                    "health_safety_and_wellbeing",
+                    "fire_and_safety",
+                ),
+
+                (
+                    "campus",
+                    "sports_and_recreation",
+                ),
+
+                (
+                    "campus",
+                    "environment_and_sustainability",
+                ),
+            },
+        },
+
+        # --------------------------------------------------------------
+        # 19 CAREER
+        # --------------------------------------------------------------
+
+        "careers_and_placements": {
+            "title": "Careers, Placements and Internships",
+
+            "categories": {
+                (
+                    "careers_and_placements",
+                    "placements",
+                ),
+
+                (
+                    "careers_and_placements",
+                    "recruitment",
+                ),
+
+                (
+                    "careers_and_placements",
+                    "internships",
+                ),
+
+                (
+                    "careers_and_placements",
+                    "career_services",
+                ),
+
+                (
+                    "careers_and_placements",
+                    "training",
+                ),
+            },
+        },
+
+        # --------------------------------------------------------------
+        # 20 FINANCE
+        # --------------------------------------------------------------
+
+        "fees_scholarships_and_finance": {
+            "title": "Fees, Scholarships and Finance",
+
+            "categories": {
+                (
+                    "finance_and_fees",
+                    "fees",
+                ),
+
+                (
+                    "finance_and_fees",
+                    "scholarships",
+                ),
+
+                (
+                    "finance_and_fees",
+                    "fellowships_and_stipends",
+                ),
+
+                (
+                    "finance_and_fees",
+                    "financial_assistance",
+                ),
+
+                (
+                    "admissions",
+                    "admission_fees",
+                ),
+            },
+        },
+
+        # --------------------------------------------------------------
+        # 21 ADMINISTRATION
+        # --------------------------------------------------------------
+
+        "administration_and_governance": {
+            "title": "Administration and Governance",
+
+            "categories": {
+                (
+                    "administration",
+                    "administrative_offices",
+                ),
+
+                (
+                    "administration",
+                    "registrar_and_establishment",
+                ),
+
+                (
+                    "administration",
+                    "directorate_and_deans",
+                ),
+
+                (
+                    "administration",
+                    "governance",
+                ),
+
+                (
+                    "administration",
+                    "statutory_bodies",
+                ),
+
+                (
+                    "rules_policies_and_regulations",
+                    "institutional_rules",
+                ),
+
+                (
+                    "rules_policies_and_regulations",
+                    "administrative_policies",
+                ),
+            },
+        },
+
+        # --------------------------------------------------------------
+        # 22 EVENTS / NOTICES
+        # --------------------------------------------------------------
+
+        "events_notices_and_announcements": {
+            "title": "Events, Notices and Announcements",
+
+            "categories": {
+                (
+                    "events_and_activities",
+                    "events",
+                ),
+
+                (
+                    "events_and_activities",
+                    "festivals",
+                ),
+
+                (
+                    "events_and_activities",
+                    "seminars_and_workshops",
+                ),
+
+                (
+                    "events_and_activities",
+                    "conferences",
+                ),
+
+                (
+                    "events_and_activities",
+                    "outreach_and_public_engagement",
+                ),
+
+                (
+                    "notices_and_announcements",
+                    "academic_notices",
+                ),
+
+                (
+                    "notices_and_announcements",
+                    "admission_notices",
+                ),
+
+                (
+                    "notices_and_announcements",
+                    "student_notices",
+                ),
+
+                (
+                    "notices_and_announcements",
+                    "administrative_notices",
+                ),
+
+                (
+                    "notices_and_announcements",
+                    "general_announcements",
+                ),
+            },
+        },
+
+        # --------------------------------------------------------------
+        # 23 SPECIAL CONTENT
+        # --------------------------------------------------------------
+
+        "special_programs_and_initiatives": {
+            "title": "Special Programs and Initiatives",
+
+            "categories": {
+                (
+                    "events_and_activities",
+                    "outreach_and_public_engagement",
+                ),
+
+                (
+                    "institutes_centres_and_units",
+                    "special_units",
+                ),
+            },
+        },
+
+        # --------------------------------------------------------------
+        # 24 REVIEW / MISCELLANEOUS
+        # --------------------------------------------------------------
+
+        "special_content_and_miscellaneous": {
+            "title": "Special Content and Miscellaneous",
+
+            "categories": set(),
+        },
+    }
+
+    # ==================================================================
+    # LARGE-DOCUMENT SPLIT RULES
+    # ==================================================================
+    #
+    # A large family is split by meaningful taxonomy category.
+    #
+    # This avoids one 600+ unit "academics.docx".
+    # ==================================================================
+
+    SPLIT_FAMILIES = {
+
+        "academic_programs": {
+            "max_units": 180,
+        },
+
+        "departments_and_schools": {
+            "max_units": 180,
+        },
+
+        "curriculum_and_registration": {
+            "max_units": 180,
+        },
+
+        "academic_calendar_and_evaluation": {
+            "max_units": 180,
+        },
+
+        "academic_rules_and_regulations": {
+            "max_units": 180,
+        },
+
+        "research_areas_and_groups": {
+            "max_units": 160,
+        },
+
+        "research_projects": {
+            "max_units": 220,
+        },
+
+        "research_centres_and_labs": {
+            "max_units": 180,
+        },
+
+        "research_outputs_and_innovation": {
+            "max_units": 180,
+        },
+
+        "people_and_leadership": {
+            "max_units": 200,
+        },
+
+        "student_residential_life": {
+            "max_units": 200,
+        },
+    }
+
+    # ==================================================================
+    # DISPLAY NAMES
+    # ==================================================================
+
+    DISPLAY_NAMES = {
+        key: value["title"]
+        for key, value in FAMILY_RULES.items()
+    }
+
+    # ==================================================================
+    # INITIALIZATION
+    # ==================================================================
+
+    def __init__(
+        self,
+        organized_root: str | Path = (
+            "storage/organized_knowledge"
+        ),
+    ):
+        self.organized_root = Path(
+            organized_root
+        )
+
+    # ==================================================================
+    # PUBLIC API
+    # ==================================================================
+
+    def plan_domain(
+        self,
+        domain: str,
+    ) -> dict:
+
+        domain = (
+            domain or ""
+        ).strip()
+
+        if not domain:
+            raise ValueError(
+                "Domain cannot be empty."
+            )
+
+        domain_root = (
+            self.organized_root
+            / domain
+        )
+
+        manifest_path = (
+            domain_root
+            / "knowledge_units.json"
+        )
+
+        if not manifest_path.exists():
+            raise FileNotFoundError(
+                "Knowledge-unit manifest does not exist: "
+                f"{manifest_path}"
+            )
+
+        data = json.loads(
+            manifest_path.read_text(
+                encoding="utf-8"
+            )
+        )
+
+        units = data.get(
+            "units",
+            []
+        )
+
+        if not isinstance(
+            units,
+            list,
+        ):
+            raise ValueError(
+                "'units' must be a list."
+            )
+
+        # --------------------------------------------------------------
+        # VALIDATE INPUT
+        # --------------------------------------------------------------
+
+        useful_units = []
+
+        for unit in units:
+
+            if not isinstance(
+                unit,
+                dict,
+            ):
+                continue
+
+            decision = (
+                unit.get(
+                    "decision",
+                    "KEEP",
+                )
+            )
+
+            # Only explicit NOISE is excluded.
+            if decision == "NOISE":
+                continue
+
+            required = (
+                "unit_id",
+                "source_document",
+                "heading",
+                "text",
+                "topic",
+                "subtopic",
+            )
+
+            missing = [
+                field
+                for field in required
+                if not unit.get(field)
+            ]
+
+            if missing:
+                raise ValueError(
+                    "Knowledge unit is missing "
+                    f"{missing}: {unit}"
+                )
+
+            useful_units.append(
+                unit
+            )
+
+        if not useful_units:
+            raise ValueError(
+                f"No useful knowledge units found for "
+                f"{domain}."
+            )
+
+        # --------------------------------------------------------------
+        # INITIAL TAXONOMY BUCKETING
+        # --------------------------------------------------------------
+
+        buckets = defaultdict(list)
+
+        for unit in useful_units:
+
+            family = (
+                self._resolve_family(
+                    unit
+                )
+            )
+
+            buckets[
+                family
+            ].append(
+                unit
+            )
+
+        # --------------------------------------------------------------
+        # SPLIT LARGE FAMILIES
+        # --------------------------------------------------------------
+
+        buckets = (
+            self._split_large_families(
+                buckets
+            )
+        )
+
+        # --------------------------------------------------------------
+        # MERGE TINY FAMILIES
+        # --------------------------------------------------------------
+
+        buckets = (
+            self._merge_tiny_families(
+                buckets
+            )
+
+        )
+
+        # --------------------------------------------------------------
+        # BUILD DOCUMENT PLANS
+        # --------------------------------------------------------------
+
+        documents = []
+
+        for document_name in sorted(
+            buckets.keys()
+        ):
+
+            document_units = buckets[
+                document_name
+            ]
+
+            document_units.sort(
+                key=self._unit_sort_key
+            )
+
+            topics = sorted(
+                {
+                    unit.get(
+                        "topic",
+                        "other",
+                    )
+                    for unit in document_units
+                }
+            )
+
+            taxonomy_categories = sorted(
+                {
+                    "/".join(
+                        [
+                            unit.get(
+                                "taxonomy_domain",
+                                unit.get(
+                                    "topic",
+                                    "other",
+                                ),
+                            ),
+                            unit.get(
+                                "taxonomy_category",
+                                unit.get(
+                                    "subtopic",
+                                    "other",
+                                ),
+                            ),
+                        ]
+                    )
+                    for unit in document_units
+                }
+            )
+
+            source_documents = sorted(
+                {
+                    unit[
+                        "source_document"
+                    ]
+                    for unit in document_units
+                }
+            )
+
+            title = (
+                self.DISPLAY_NAMES.get(
+                    document_name,
+                    self._display_name(
+                        document_name
+                    ),
+                )
+            )
+
+            documents.append(
+                {
+                    "document_id": (
+                        document_name
+                    ),
+
+                    "filename": (
+                        f"{document_name}.docx"
+                    ),
+
+                    "title": title,
+
+                    "topics": topics,
+
+                    "taxonomy_categories": (
+                        taxonomy_categories
+                    ),
+
+                    "source_documents": (
+                        source_documents
+                    ),
+
+                    "unit_count": len(
+                        document_units
+                    ),
+
+                    "units": (
+                        document_units
+                    ),
+                }
+            )
+
+        # --------------------------------------------------------------
+        # COVERAGE VALIDATION
+        # --------------------------------------------------------------
+
+        planned_unit_ids = []
+
+        for document in documents:
+
+            for unit in document[
+                "units"
+            ]:
+
+                planned_unit_ids.append(
+                    unit["unit_id"]
+                )
+
+        input_unit_ids = [
+            unit["unit_id"]
+            for unit in useful_units
+        ]
+
+        duplicate_input_ids = (
+            self._duplicates(
+                input_unit_ids
+            )
+        )
+
+        duplicate_planned_ids = (
+            self._duplicates(
+                planned_unit_ids
+            )
+        )
+
+        if duplicate_input_ids:
+            raise ValueError(
+                "Duplicate input knowledge-unit IDs: "
+                f"{duplicate_input_ids}"
+            )
+
+        if duplicate_planned_ids:
+            raise ValueError(
+                "Duplicate planned knowledge-unit IDs: "
+                f"{duplicate_planned_ids}"
+            )
+
+        missing_ids = sorted(
+            set(input_unit_ids)
+            - set(planned_unit_ids)
+        )
+
+        extra_ids = sorted(
+            set(planned_unit_ids)
+            - set(input_unit_ids)
+        )
+
+        if missing_ids:
+            raise ValueError(
+                "Knowledge units were lost during RAG planning: "
+                f"{missing_ids}"
+            )
+
+        if extra_ids:
+            raise ValueError(
+                "RAG plan contains unknown knowledge units: "
+                f"{extra_ids}"
+            )
+
+        if len(input_unit_ids) != len(
+            planned_unit_ids
+        ):
+            raise ValueError(
+                "RAG plan coverage mismatch."
+            )
+
+        # --------------------------------------------------------------
+        # FINAL STATISTICS
+        # --------------------------------------------------------------
+
+        topic_counts = defaultdict(int)
+
+        taxonomy_counts = defaultdict(int)
+
+        for unit in useful_units:
+
+            topic_counts[
+                unit.get(
+                    "topic",
+                    "other",
+                )
+            ] += 1
+
+            taxonomy_key = "/".join(
+                [
+                    unit.get(
+                        "taxonomy_domain",
+                        unit.get(
+                            "topic",
+                            "other",
+                        ),
+                    ),
+                    unit.get(
+                        "taxonomy_category",
+                        unit.get(
+                            "subtopic",
+                            "other",
+                        ),
+                    ),
+                ]
+            )
+
+            taxonomy_counts[
+                taxonomy_key
+            ] += 1
+
+        # --------------------------------------------------------------
+        # DOCUMENT DISTRIBUTION
+        # --------------------------------------------------------------
+
+        document_counts = {
+            document["document_id"]: (
+                document["unit_count"]
+            )
+            for document in documents
+        }
+
+        # --------------------------------------------------------------
+        # FINAL PLAN
+        # --------------------------------------------------------------
+
+        plan = {
+            "version": "2.0",
+
+            "planner": (
+                "KnowledgeRAGPlanner"
+            ),
+
+            "strategy": (
+                "deterministic_dynamic_taxonomy_grouping"
+            ),
+
+            "domain": domain,
+
+            "input_manifest": str(
+                manifest_path
+            ),
+
+            "source_documents": sorted(
+                {
+                    unit[
+                        "source_document"
+                    ]
+                    for unit in useful_units
+                }
+            ),
+
+            "input_units": len(
+                useful_units
+            ),
+
+            "rag_documents": len(
+                documents
+            ),
+
+            "target_document_range": {
+                "soft_min": 20,
+                "soft_max": 30,
+            },
+
+            "topic_counts": dict(
+                sorted(
+                    topic_counts.items()
+                )
+            ),
+
+            "taxonomy_counts": dict(
+                sorted(
+                    taxonomy_counts.items()
+                )
+            ),
+
+            "document_counts": (
+                document_counts
+            ),
+
+            "coverage": {
+                "input_units": len(
+                    useful_units
+                ),
+
+                "planned_units": len(
+                    planned_unit_ids
+                ),
+
+                "missing_units": 0,
+
+                "extra_units": 0,
+
+                "coverage_complete": True,
+            },
+
+            "documents": documents,
+        }
+
+        # --------------------------------------------------------------
+        # WRITE PLAN
+        # --------------------------------------------------------------
+
+        output_path = (
+            domain_root
+            / "rag_plan.json"
+        )
+
+        output_path.write_text(
+            json.dumps(
+                plan,
+                indent=4,
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+
+        # --------------------------------------------------------------
+        # LOGGING
+        # --------------------------------------------------------------
+
+        print()
+        print("=" * 100)
+        print(
+            "PHASE 8.4 — DYNAMIC RAG PLANNER V2"
+        )
+        print("=" * 100)
+
+        print(
+            "Domain:",
+            domain,
+        )
+
+        print(
+            "Input units:",
+            plan["input_units"],
+        )
+
+        print(
+            "RAG documents:",
+            plan["rag_documents"],
+        )
+
+        print(
+            "Target range:",
+            "20-30 soft target",
+        )
+
+        print(
+            "Coverage:",
+            (
+                "PASS"
+                if plan[
+                    "coverage"
+                ][
+                    "coverage_complete"
+                ]
+                else "FAIL"
+            ),
+        )
+
+        print()
+        print(
+            "RAG DOCUMENT PLAN"
+        )
+
+        for document in documents:
+
+            print(
+                f"{document['filename']:50s}"
+                f" → "
+                f"{document['unit_count']} units"
+            )
+
+        print()
+        print(
+            "Plan:",
+            output_path,
+        )
+
+        return plan
+
+    # ==================================================================
+    # RESOLVE FAMILY
+    # ==================================================================
+
+    def _resolve_family(
+        self,
+        unit: dict,
+    ) -> str:
+
+        taxonomy_domain = (
+            self._normalize_topic(
+                unit.get(
+                    "taxonomy_domain",
+                    unit.get(
+                        "topic",
+                        "other",
+                    ),
+                )
+            )
+        )
+
+        taxonomy_category = (
+            self._normalize_topic(
+                unit.get(
+                    "taxonomy_category",
+                    unit.get(
+                        "subtopic",
+                        "other",
+                    ),
+                )
+            )
+        )
+
+        key = (
+            taxonomy_domain,
+            taxonomy_category,
+        )
+
+        # Explicit family mapping.
+        for family_name, definition in (
+            self.FAMILY_RULES.items()
+        ):
+
+            if key in definition[
+                "categories"
+            ]:
+                return family_name
+
+        # Any review material initially goes to
+        # the safety-net family.
+        if taxonomy_domain == "review":
+            return (
+                "special_content_and_miscellaneous"
+            )
+
+        # --------------------------------------------------------------
+        # DOMAIN FALLBACK
+        # --------------------------------------------------------------
+
+        return self._domain_fallback(
+            taxonomy_domain
+        )
+
+    # ==================================================================
+    # DOMAIN FALLBACK
+    # ==================================================================
+
+    def _domain_fallback(
+        self,
+        domain: str,
+    ) -> str:
+
+        fallback = {
+
+            "campus":
+                "campus_and_infrastructure",
+
+            "academics":
+                "academic_programs",
+
+            "research":
+                "research_outputs_and_innovation",
+
+            "people":
+                "people_and_leadership",
+
+            "admissions":
+                "academic_programs",
+
+            "student_life":
+                "student_life_and_welfare",
+
+            "hostels":
+                "student_residential_life",
+
+            "food_and_dining":
+                "student_residential_life",
+
+            "finance_and_fees":
+                "fees_scholarships_and_finance",
+
+            "careers_and_placements":
+                "careers_and_placements",
+
+            "administration":
+                "administration_and_governance",
+
+            "rules_policies_and_regulations":
+                "administration_and_governance",
+
+            "facilities_and_infrastructure":
+                "campus_and_infrastructure",
+
+            "health_safety_and_wellbeing":
+                "health_safety_and_wellbeing",
+
+            "events_and_activities":
+                "events_notices_and_announcements",
+
+            "notices_and_announcements":
+                "events_notices_and_announcements",
+
+            "contacts_and_directory":
+                "contacts_and_directory",
+
+            "institutes_centres_and_units":
+                "institute_overview",
+        }
+
+        return fallback.get(
+            domain,
+            "special_content_and_miscellaneous",
+        )
+
+    # ==================================================================
+    # SPLIT LARGE FAMILIES
+    # ==================================================================
+
+    def _split_large_families(
+        self,
+        buckets: dict[str, list[dict]],
+    ) -> dict[str, list[dict]]:
+
+        final = defaultdict(list)
+
+        for family_name, units in buckets.items():
+
+            rule = self.SPLIT_FAMILIES.get(
+                family_name
+            )
+
+            if not rule:
+                final[
+                    family_name
+                ].extend(
+                    units
+                )
+                continue
+
+            max_units = int(
+                rule["max_units"]
+            )
+
+            if len(units) <= max_units:
+                final[
+                    family_name
+                ].extend(
+                    units
+                )
+                continue
+
+            # ----------------------------------------------------------
+            # Split using taxonomy category.
+            #
+            # This is preferable to blindly slicing by 180 because it
+            # keeps coherent knowledge categories together.
+            # ----------------------------------------------------------
+
+            category_groups = defaultdict(
+                list
+            )
+
+            for unit in units:
+
+                key = (
+                    self._normalize_topic(
+                        unit.get(
+                            "taxonomy_domain",
+                            unit.get(
+                                "topic",
+                                "other",
+                            ),
+                        )
+                    ),
+                    self._normalize_topic(
+                        unit.get(
+                            "taxonomy_category",
+                            unit.get(
+                                "subtopic",
+                                "other",
+                            ),
+                        )
+                    ),
+                )
+
+                category_groups[
+                    key
+                ].append(
+                    unit
+                )
+
+            # ----------------------------------------------------------
+            # If category buckets themselves are too large, partition
+            # them deterministically.
+            # ----------------------------------------------------------
+
+            current_index = 1
+
+            current_name = family_name
+
+            current_count = 0
+
+            for category_key in sorted(
+                category_groups.keys()
+            ):
+
+                category_units = (
+                    category_groups[
+                        category_key
+                    ]
+                )
+
+                category_units.sort(
+                    key=self._unit_sort_key
+                )
+
+                if (
+                    current_count
+                    + len(category_units)
+                    > max_units
+                    and current_count > 0
+                ):
+                    current_index += 1
+                    current_count = 0
+
+                if current_index == 1:
+                    target_name = current_name
+                else:
+                    target_name = (
+                        f"{family_name}_"
+                        f"{current_index:02d}"
+                    )
+
+                final[
+                    target_name
+                ].extend(
+                    category_units
+                )
+
+                current_count += len(
+                    category_units
+                )
+
+                # ------------------------------------------------------
+                # A single category may itself exceed the threshold.
+                # Partition that category if necessary.
+                # ------------------------------------------------------
+
+                if current_count > (
+                    max_units * 2
+                ):
+                    # This is rare. Rebuild this family deterministically.
+                    oversized = final[
+                        target_name
+                    ]
+
+                    del final[
+                        target_name
+                    ]
+
+                    chunks = self._chunk_units(
+                        oversized,
+                        max_units,
+                    )
+
+                    for index, chunk in enumerate(
+                        chunks,
+                        start=1,
+                    ):
+
+                        if index == 1:
+                            name = target_name
+                        else:
+                            name = (
+                                f"{family_name}_"
+                                f"{current_index + index - 1:02d}"
+                            )
+
+                        final[
+                            name
+                        ].extend(
+                            chunk
+                        )
+
+                    current_index += (
+                        len(chunks) - 1
+                    )
+
+                    current_count = len(
+                        chunks[-1]
+                    )
+
+        return {
+            key: list(value)
+            for key, value in final.items()
+        }
+
+    # ==================================================================
+    # MERGE TINY FAMILIES
+    # ==================================================================
+
+    def _merge_tiny_families(
+        self,
+        buckets: dict[str, list[dict]],
+    ) -> dict[str, list[dict]]:
+
+        result = {
+            key: list(value)
+            for key, value in buckets.items()
+        }
+
+        # Small families are valid. We only merge clearly tiny families
+        # when doing so produces a sensible semantic combination.
+        #
+        # This prevents dozens of 1-5 unit documents.
+        tiny = {
+            name: units
+            for name, units in result.items()
+            if len(units) <= 5
+            and name
+            not in {
+                "special_content_and_miscellaneous",
+            }
+        }
+
+        if not tiny:
+            return result
+
+        # Candidate merge families in priority order.
+        merge_targets = [
+            (
+                {
+                    "administration_and_governance",
+                    "contacts_and_directory",
+                },
+                "administration_and_governance",
+            ),
+            (
+                {
+                    "library_and_learning_facilities",
+                    "campus_and_infrastructure",
+                },
+                "campus_and_infrastructure",
+            ),
+            (
+                {
+                    "fees_scholarships_and_finance",
+                    "careers_and_placements",
+                },
+                "careers_and_placements",
+            ),
+            (
+                {
+                    "events_notices_and_announcements",
+                    "special_programs_and_initiatives",
+                },
+                "events_notices_and_announcements",
+            ),
+        ]
+
+        for family_set, target in merge_targets:
+
+            present = [
+                name
+                for name in family_set
+                if name in result
+            ]
+
+            if len(present) < 2:
+                continue
+
+            if all(
+                name in tiny
+                for name in present
+            ):
+
+                combined = []
+
+                for name in present:
+                    combined.extend(
+                        result.pop(name)
+                    )
+
+                result.setdefault(
+                    target,
+                    []
+                ).extend(
+                    combined
+                )
+
+        return result
+
+    # ==================================================================
+    # CHUNK OVERSIZED CATEGORY
+    # ==================================================================
+
+    def _chunk_units(
+        self,
+        units: list[dict],
+        max_units: int,
+    ) -> list[list[dict]]:
+
+        units = sorted(
+            units,
+            key=self._unit_sort_key
+        )
+
+        chunks = []
+
+        for start in range(
+            0,
+            len(units),
+            max_units,
+        ):
+            chunks.append(
+                units[
+                    start:
+                    start + max_units
+                ]
+            )
+
+        return chunks
+
+    # ==================================================================
+    # UNIT SORT
+    # ==================================================================
+
+    def _unit_sort_key(
+        self,
+        unit: dict,
+    ) -> tuple:
+
+        try:
+            section_index = int(
+                unit.get(
+                    "section_index",
+                    0,
+                )
+            )
+        except (
+            TypeError,
+            ValueError,
+        ):
+            section_index = 0
+
+        try:
+            page_index = int(
+                unit.get(
+                    "page_index",
+                    0,
+                )
+            )
+        except (
+            TypeError,
+            ValueError,
+        ):
+            page_index = 0
+
+        return (
+            unit.get(
+                "source_document",
+                "",
+            ),
+            page_index,
+            section_index,
+        )
+
+    # ==================================================================
+    # TOPIC NORMALIZATION
+    # ==================================================================
+
+    def _normalize_topic(
+        self,
+        topic: str,
+    ) -> str:
+
+        topic = (
+            topic
+            or "other"
+        ).strip().lower()
+
+        topic = re.sub(
+            r"[^a-z0-9_]+",
+            "_",
+            topic,
+        )
+
+        topic = re.sub(
+            r"_+",
+            "_",
+            topic,
+        )
+
+        return (
+            topic.strip("_")
+            or "other"
+        )
+
+    # ==================================================================
+    # DISPLAY NAME
+    # ==================================================================
+
+    def _display_name(
+        self,
+        value: str,
+    ) -> str:
+
+        value = re.sub(
+            r"[_\-]+",
+            " ",
+            value,
+        )
+
+        value = re.sub(
+            r"\s+",
+            " ",
+            value,
+        )
+
+        return (
+            value
+            .strip()
+            .title()
+        )
+
+    # ==================================================================
+    # DUPLICATE DETECTION
+    # ==================================================================
+
+    def _duplicates(
+        self,
+        values: list[str],
+    ) -> list[str]:
+
+        seen = set()
+        duplicates = set()
+
+        for value in values:
+
+            if value in seen:
+                duplicates.add(
+                    value
+                )
+
+            seen.add(
+                value
+            )
+
+        return sorted(
+            duplicates
+        )
+
+
+if __name__ == "__main__":
+
+    print(
+        "KnowledgeRAGPlanner"
+    )
+
+    print(
+        "Phase 8.4 — Dynamic RAG Planner"
+    )

@@ -1,3 +1,8 @@
+from __future__ import annotations
+
+import json
+import re
+from pathlib import Path
 from urllib.parse import urlparse
 
 from bs4 import BeautifulSoup
@@ -8,102 +13,391 @@ from crawler.crawl_queue import CrawlQueue
 from crawler.depth_tracker import DepthTracker
 from crawler.url_classifier import classify_url
 
-from models.crawl_plan import CrawlAction
-from models.url import URLInfo, URLType
+from models.crawl_plan import (
+    CrawlAction,
+)
+from models.url import (
+    URLInfo,
+    URLType,
+)
 
-from pipeline.navigation_pipeline import NavigationPipeline
+from pipeline.navigation_pipeline import (
+    NavigationPipeline,
+)
 
-from processors.page_processor import PageProcessor
-from processors.document_downloader import DocumentDownloader
-from processors.pdf_processor import PDFProcessor
-from processors.xlsx_processor import XLSXProcessor
-from processors.document_integrator import DocumentIntegrator
+from processors.page_processor import (
+    PageProcessor,
+)
 
-from url_discovery import URLDiscovery
+from processors.document_downloader import (
+    DocumentDownloader,
+)
+
+from processors.pdf_processor import (
+    PDFProcessor,
+)
+
+from processors.xlsx_processor import (
+    XLSXProcessor,
+)
+
+from processors.document_integrator import (
+    DocumentIntegrator,
+)
+
+from url_discovery import (
+    URLDiscovery,
+)
 
 
 class CrawlEngine:
     """
-    Main crawl execution engine.
+    Production-oriented website crawl execution engine.
 
-    Phase 5 architecture:
+    Architecture:
 
-        Page
-          ↓
-        NavigationPipeline
-          ↓
-        URLDiscovery
-          ↓
-        DepthTracker
-          ↓
-        CrawlPolicy
-          ↓
-        CrawlPlan
-          ↓
-        CrawlQueue
-          ↓
-        Execute plan
+        Start URL
+            ↓
+        URL Classification
+            ↓
+        Crawl Policy
+            ↓
+        Crawl Plan
+            ↓
+        Crawl Queue
+            ↓
+        Execute
+            ↓
+        ┌───────────────────────┐
+        │                       │
+        │ WEBPAGE               │ DOCUMENT
+        │                       │
+        ↓                       ↓
+    crawl_page()          downloader
+        ↓                 processor
+    PageProcessor               ↓
+        ↓                 integrator
+    discover links
+        │
+        └──────────────→ queue
 
-    Phase 6 document flow:
+    Responsibilities:
 
-        DOCUMENT plan
-          ↓
-        DocumentDownloader
-          ↓
-        PDFProcessor / XLSXProcessor
-          ↓
-        Processed Markdown + Metadata
-          ↓
-        DocumentIntegrator
+    - Execute crawl plans.
+    - Keep webpage/document/resource execution separate.
+    - Prevent duplicate URL execution.
+    - Continue crawling after individual failures.
+    - Support limited test crawls.
+    - Support full crawls with max_pages=None.
+    - Track crawl-wide URL state.
+    - Track document inventory.
+    - Persist a crawl report.
+    - Preserve the existing crawler architecture.
 
-    Important:
+    This class does NOT:
 
-    - Webpage crawling remains unchanged.
-    - PDF processing remains unchanged.
-    - XLSX processing is added as another document type.
-    - Chunking is NOT performed here.
-    - Embedding is NOT performed here.
-    - Retrieval is NOT performed here.
+    - clean knowledge
+    - organize knowledge
+    - build RAG documents
+    - generate embeddings
+    - perform retrieval
     """
 
-    def __init__(self):
+    # ========================================================
+    # INITIALIZATION
+    # ========================================================
+
+    def __init__(
+        self,
+        report_root: str | Path = (
+            "storage/crawl_reports"
+        ),
+    ):
+
+        # ----------------------------------------------------
+        # CORE CRAWL COMPONENTS
+        # ----------------------------------------------------
+
         self.queue = CrawlQueue()
-        self.depth_tracker = DepthTracker()
+
+        self.depth_tracker = (
+            DepthTracker()
+        )
+
         self.policy = CrawlPolicy()
+
         self.discovery = URLDiscovery()
 
         self.processor = PageProcessor()
 
-        # ----------------------------------------------------------
-        # PHASE 6 — DOCUMENT PROCESSORS
-        # ----------------------------------------------------------
+        # ----------------------------------------------------
+        # DOCUMENT PROCESSORS
+        # ----------------------------------------------------
 
-        self.document_downloader = DocumentDownloader()
-        self.pdf_processor = PDFProcessor()
-        self.xlsx_processor = XLSXProcessor()
-        self.document_integrator = DocumentIntegrator()
+        self.document_downloader = (
+            DocumentDownloader()
+        )
 
-        # ----------------------------------------------------------
-        # STATISTICS
-        # ----------------------------------------------------------
+        self.pdf_processor = (
+            PDFProcessor()
+        )
 
-        self.pages_crawled = 0
-        self.documents_discovered = 0
-        self.resources_discovered = 0
-        self.ignored_plans = 0
-        self.failed_pages = 0
+        self.xlsx_processor = (
+            XLSXProcessor()
+        )
 
-        # ----------------------------------------------------------
+        self.document_integrator = (
+            DocumentIntegrator()
+        )
+
+        # ----------------------------------------------------
+        # REPORTING
+        # ----------------------------------------------------
+
+        self.report_root = Path(
+            report_root
+        )
+
+        # ----------------------------------------------------
+        # CRAWL-WIDE URL INVENTORY
+        #
+        # One entry per unique normalized URL.
+        # ----------------------------------------------------
+
+        self.url_inventory = {}
+
+        # ----------------------------------------------------
         # DOCUMENT INVENTORY
         #
-        # One inventory entry per unique document URL.
-        # ----------------------------------------------------------
+        # One entry per unique document URL.
+        # ----------------------------------------------------
 
         self.document_inventory = {}
 
-    # ------------------------------------------------------------------
+        # ----------------------------------------------------
+        # RESOURCE INVENTORY
+        # ----------------------------------------------------
+
+        self.resource_inventory = {}
+
+        # ----------------------------------------------------
+        # STATISTICS
+        # ----------------------------------------------------
+
+        self.pages_attempted = 0
+        self.pages_crawled = 0
+        self.failed_pages = 0
+        self.pages_skipped_limit = 0
+
+        self.documents_discovered = 0
+        self.documents_processed = 0
+        self.failed_documents = 0
+
+        self.resources_discovered = 0
+        self.ignored_plans = 0
+
+        self.unique_urls_discovered = 0
+        self.queue_enqueued = 0
+        self.duplicate_urls_skipped = 0
+
+        # ----------------------------------------------------
+        # CURRENT CRAWL
+        # ----------------------------------------------------
+
+        self.start_url = None
+        self.base_domain = None
+
+        self.max_pages = None
+        self.crawl_mode = "UNKNOWN"
+
+    # ========================================================
+    # RESET STATE
+    # ========================================================
+
+    def _reset_state(self) -> None:
+
+        self.queue = CrawlQueue()
+
+        self.depth_tracker = (
+            DepthTracker()
+        )
+
+        self.url_inventory = {}
+        self.document_inventory = {}
+        self.resource_inventory = {}
+
+        self.pages_attempted = 0
+        self.pages_crawled = 0
+        self.failed_pages = 0
+        self.pages_skipped_limit = 0
+
+        self.documents_discovered = 0
+        self.documents_processed = 0
+        self.failed_documents = 0
+
+        self.resources_discovered = 0
+        self.ignored_plans = 0
+
+        self.unique_urls_discovered = 0
+        self.queue_enqueued = 0
+        self.duplicate_urls_skipped = 0
+
+    # ========================================================
+    # URL NORMALIZATION
+    # ========================================================
+
+    def _normalize_tracking_key(
+        self,
+        url: str,
+    ) -> str:
+
+        return (
+            url or ""
+        ).strip()
+
+    # ========================================================
+    # INVENTORY CREATION
+    # ========================================================
+
+    def _register_url(
+        self,
+        plan,
+        source_url: str | None = None,
+    ) -> bool:
+        """
+        Register a URL globally.
+
+        Returns:
+
+            True  = new URL
+            False = already known URL
+
+        This is the execution-level deduplication layer.
+
+        It is deliberately independent of college/site-specific
+        rules.
+        """
+
+        key = (
+            self._normalize_tracking_key(
+                plan.url
+            )
+        )
+
+        if not key:
+
+            return False
+
+        existing = (
+            self.url_inventory.get(
+                key
+            )
+        )
+
+        if existing is not None:
+
+            discovered_from = (
+                existing.get(
+                    "discovered_from",
+                    [],
+                )
+            )
+
+            if source_url:
+
+                if (
+                    source_url
+                    not in discovered_from
+                ):
+
+                    discovered_from.append(
+                        source_url
+                    )
+
+            existing[
+                "discovered_from"
+            ] = discovered_from
+
+            self.duplicate_urls_skipped += 1
+
+            return False
+
+        self.url_inventory[
+            key
+        ] = {
+            "url": plan.url,
+            "normalized_url": (
+                plan.url
+            ),
+            "url_type": (
+                plan.url_type.value
+            ),
+            "action": (
+                plan.action.value
+            ),
+            "priority": (
+                plan.priority.name
+            ),
+            "depth": plan.depth,
+            "discovered_from": (
+                [source_url]
+                if source_url
+                else []
+            ),
+            "status": "discovered",
+            "error": None,
+            "output": None,
+        }
+
+        self.unique_urls_discovered += 1
+
+        return True
+
+    # ========================================================
+    # UPDATE URL STATUS
+    # ========================================================
+
+    def _set_url_status(
+        self,
+        url: str,
+        status: str,
+        *,
+        error: str | None = None,
+        output: str | None = None,
+    ) -> None:
+
+        key = (
+            self._normalize_tracking_key(
+                url
+            )
+        )
+
+        record = (
+            self.url_inventory.get(
+                key
+            )
+        )
+
+        if record is None:
+            return
+
+        record[
+            "status"
+        ] = status
+
+        record[
+            "error"
+        ] = error
+
+        if output is not None:
+
+            record[
+                "output"
+            ] = output
+
+    # ========================================================
     # NAVIGATION DISCOVERY
-    # ------------------------------------------------------------------
+    # ========================================================
 
     def _discover_navigation(
         self,
@@ -111,8 +405,7 @@ class CrawlEngine:
         source_url: str,
     ) -> list[URLInfo]:
         """
-        Run the Phase 3 navigation pipeline followed by
-        Phase 4 URL discovery.
+        Run navigation extraction followed by URL discovery.
         """
 
         soup = BeautifulSoup(
@@ -120,26 +413,30 @@ class CrawlEngine:
             "html.parser",
         )
 
-        navigation_pipeline = NavigationPipeline(
-            soup=soup
+        navigation_pipeline = (
+            NavigationPipeline(
+                soup=soup
+            )
         )
 
         navigation_result = (
             navigation_pipeline.run()
         )
 
-        candidates = navigation_result[
-            "candidates"
-        ]
+        candidates = (
+            navigation_result[
+                "candidates"
+            ]
+        )
 
         return self.discovery.discover(
             candidates=candidates,
             source_url=source_url,
         )
 
-    # ------------------------------------------------------------------
-    # PLAN DISCOVERY
-    # ------------------------------------------------------------------
+    # ========================================================
+    # PLAN CREATION + ENQUEUE
+    # ========================================================
 
     def _create_and_enqueue_plans(
         self,
@@ -147,9 +444,11 @@ class CrawlEngine:
         source_url: str,
     ) -> None:
         """
-        Convert discovered URLs into CrawlPlans and enqueue them.
+        Convert discovered URLs into crawl plans.
 
-        Crawl depth is assigned here, not during URL discovery.
+        Deduplication happens before enqueueing so a URL is not
+        executed repeatedly simply because several pages link
+        to it.
         """
 
         for url_info in discovered_urls:
@@ -158,21 +457,20 @@ class CrawlEngine:
                 url_info.normalized_url
             )
 
-            # ----------------------------------------------------------
-            # ROOT
-            # ----------------------------------------------------------
+            # ------------------------------------------------
+            # DEPTH
+            # ------------------------------------------------
 
-            if normalized_url == source_url:
+            if (
+                normalized_url
+                == source_url
+            ):
 
                 depth = (
                     self.depth_tracker.register_root(
                         normalized_url
                     )
                 )
-
-            # ----------------------------------------------------------
-            # CHILD
-            # ----------------------------------------------------------
 
             else:
 
@@ -183,113 +481,156 @@ class CrawlEngine:
                     )
                 )
 
-            # ----------------------------------------------------------
-            # CREATE URL INFO WITH DEPTH
-            # ----------------------------------------------------------
+            # ------------------------------------------------
+            # URL INFO WITH DEPTH
+            # ------------------------------------------------
 
             planned_url_info = URLInfo(
                 raw_url=url_info.raw_url,
-                normalized_url=url_info.normalized_url,
+                normalized_url=(
+                    url_info.normalized_url
+                ),
                 url_type=url_info.url_type,
-                discovered_from=url_info.discovered_from,
+                discovered_from=(
+                    url_info.discovered_from
+                ),
                 depth=depth,
             )
 
-            # ----------------------------------------------------------
+            # ------------------------------------------------
             # CREATE PLAN
-            # ----------------------------------------------------------
+            # ------------------------------------------------
 
             plan = self.policy.create_plan(
                 planned_url_info,
                 depth=depth,
             )
 
-            # ----------------------------------------------------------
-            # IGNORE
-            # ----------------------------------------------------------
+            # ------------------------------------------------
+            # GLOBAL URL INVENTORY
+            # ------------------------------------------------
 
-            if plan.action == CrawlAction.IGNORE:
+            is_new = (
+                self._register_url(
+                    plan=plan,
+                    source_url=source_url,
+                )
+            )
 
-                self.ignored_plans += 1
+            if not is_new:
 
                 continue
 
-            # ----------------------------------------------------------
+            # ------------------------------------------------
+            # IGNORE
+            # ------------------------------------------------
+
+            if (
+                plan.action
+                == CrawlAction.IGNORE
+            ):
+
+                self.ignored_plans += 1
+
+                self._set_url_status(
+                    plan.url,
+                    "ignored",
+                )
+
+                continue
+
+            # ------------------------------------------------
             # DOCUMENT INVENTORY
-            # ----------------------------------------------------------
+            # ------------------------------------------------
 
-            if plan.action == CrawlAction.DOCUMENT:
+            if (
+                plan.action
+                == CrawlAction.DOCUMENT
+            ):
 
-                document_url = plan.url
+                document_url = (
+                    plan.url
+                )
 
-                if (
+                self.document_inventory[
                     document_url
-                    not in self.document_inventory
-                ):
-
-                    self.document_inventory[
-                        document_url
-                    ] = {
-                        "url": document_url,
-                        "url_type": (
-                            plan.url_type.value
-                        ),
-                        "depth": plan.depth,
-                        "discovered_from": [
-                            plan.discovered_from
-                        ],
-                    }
-
-                else:
-
-                    source_pages = (
-                        self.document_inventory[
-                            document_url
-                        ][
-                            "discovered_from"
-                        ]
-                    )
-
-                    if (
+                ] = {
+                    "url": document_url,
+                    "url_type": (
+                        plan.url_type.value
+                    ),
+                    "depth": plan.depth,
+                    "discovered_from": [
                         plan.discovered_from
-                        not in source_pages
-                    ):
+                    ],
+                    "status": "discovered",
+                    "output": None,
+                    "error": None,
+                }
 
-                        source_pages.append(
-                            plan.discovered_from
-                        )
-
-                # Count unique documents.
                 self.documents_discovered = (
                     len(
                         self.document_inventory
                     )
                 )
 
-            # ----------------------------------------------------------
-            # RESOURCE
-            # ----------------------------------------------------------
+            # ------------------------------------------------
+            # RESOURCE INVENTORY
+            # ------------------------------------------------
 
-            elif plan.action == CrawlAction.RESOURCE:
+            elif (
+                plan.action
+                == CrawlAction.RESOURCE
+            ):
 
-                self.resources_discovered += 1
+                self.resource_inventory[
+                    plan.url
+                ] = {
+                    "url": plan.url,
+                    "url_type": (
+                        plan.url_type.value
+                    ),
+                    "depth": plan.depth,
+                    "discovered_from": [
+                        plan.discovered_from
+                    ],
+                    "status": "discovered",
+                }
 
-            # ----------------------------------------------------------
-            # QUEUE
-            # ----------------------------------------------------------
+                self.resources_discovered = (
+                    len(
+                        self.resource_inventory
+                    )
+                )
 
-            self.queue.enqueue(plan)
+            # ------------------------------------------------
+            # ENQUEUE
+            # ------------------------------------------------
 
-    # ------------------------------------------------------------------
-    # PROCESS ONE PAGE
-    # ------------------------------------------------------------------
+            self.queue.enqueue(
+                plan
+            )
+
+            self.queue_enqueued += 1
+
+            self._set_url_status(
+                plan.url,
+                "queued",
+            )
+
+    # ========================================================
+    # PROCESS ONE WEBPAGE
+    # ========================================================
 
     async def _process_page(
         self,
         plan,
     ) -> None:
         """
-        Crawl and process one WEBPAGE plan.
+        Crawl and process one webpage.
+
+        A page failure is raised to the crawl loop, where it
+        is recorded and the next queued item continues.
         """
 
         print(
@@ -297,7 +638,8 @@ class CrawlEngine:
         )
 
         print(
-            f"Crawling Page #{self.pages_crawled + 1}"
+            f"Crawling Webpage Attempt "
+            f"#{self.pages_attempted}"
         )
 
         print(
@@ -316,6 +658,11 @@ class CrawlEngine:
             "======================================"
         )
 
+        self._set_url_status(
+            plan.url,
+            "processing",
+        )
+
         page = await crawl_page(
             plan.url
         )
@@ -323,31 +670,28 @@ class CrawlEngine:
         if not page.success:
 
             raise RuntimeError(
-                f"Page crawl failed: {plan.url}"
+                f"Page crawl failed: "
+                f"{plan.url}"
             )
 
         if not page.html:
 
             raise RuntimeError(
-                f"Empty HTML returned: {plan.url}"
+                f"Empty HTML returned: "
+                f"{plan.url}"
             )
 
-        # --------------------------------------------------------------
-        # EXISTING PAGE PROCESSING
-        # --------------------------------------------------------------
+        # ----------------------------------------------------
+        # PAGE PROCESSING
+        # ----------------------------------------------------
 
-        self.processor.process(
+        output = self.processor.process(
             page
         )
 
-        print(
-            "Title :",
-            page.title,
-        )
-
-        # --------------------------------------------------------------
+        # ----------------------------------------------------
         # DISCOVER NEXT URLs
-        # --------------------------------------------------------------
+        # ----------------------------------------------------
 
         discovered_urls = (
             self._discover_navigation(
@@ -357,18 +701,47 @@ class CrawlEngine:
         )
 
         print(
+            "Title :",
+            page.title,
+        )
+
+        print(
             "URLs Discovered :",
             len(discovered_urls),
         )
 
         self._create_and_enqueue_plans(
-            discovered_urls=discovered_urls,
+            discovered_urls=(
+                discovered_urls
+            ),
             source_url=page.url,
         )
 
-    # ------------------------------------------------------------------
+        # ----------------------------------------------------
+        # SUCCESS
+        # ----------------------------------------------------
+
+        output_path = None
+
+        if output is not None:
+
+            if isinstance(
+                output,
+                (str, Path),
+            ):
+                output_path = str(
+                    output
+                )
+
+        self._set_url_status(
+            plan.url,
+            "success",
+            output=output_path,
+        )
+
+    # ========================================================
     # PROCESS ONE DOCUMENT
-    # ------------------------------------------------------------------
+    # ========================================================
 
     async def _process_document(
         self,
@@ -376,18 +749,6 @@ class CrawlEngine:
     ) -> None:
         """
         Download and process one discovered document.
-
-        Phase 6 flow:
-
-            DOCUMENT plan
-                ↓
-            DocumentDownloader
-                ↓
-            PDFProcessor / XLSXProcessor
-                ↓
-            Markdown + Metadata
-                ↓
-            DocumentIntegrator
         """
 
         print(
@@ -422,9 +783,14 @@ class CrawlEngine:
             "======================================"
         )
 
-        # --------------------------------------------------------------
+        self._set_url_status(
+            plan.url,
+            "processing",
+        )
+
+        # ----------------------------------------------------
         # DOWNLOAD
-        # --------------------------------------------------------------
+        # ----------------------------------------------------
 
         document_path = (
             self.document_downloader.download(
@@ -437,11 +803,14 @@ class CrawlEngine:
             document_path,
         )
 
-        # --------------------------------------------------------------
-        # PROCESS ACCORDING TO DOCUMENT TYPE
-        # --------------------------------------------------------------
+        # ----------------------------------------------------
+        # PROCESS TYPE
+        # ----------------------------------------------------
 
-        if plan.url_type == URLType.PDF:
+        if (
+            plan.url_type
+            == URLType.PDF
+        ):
 
             print(
                 "Processor  : PDFProcessor"
@@ -454,7 +823,10 @@ class CrawlEngine:
                 )
             )
 
-        elif plan.url_type == URLType.XLSX:
+        elif (
+            plan.url_type
+            == URLType.XLSX
+        ):
 
             print(
                 "Processor  : XLSXProcessor"
@@ -479,39 +851,35 @@ class CrawlEngine:
             markdown_path,
         )
 
-        # --------------------------------------------------------------
-        # METADATA
-        # --------------------------------------------------------------
-
         metadata_path = (
-            markdown_path.with_suffix(".json")
+            markdown_path.with_suffix(
+                ".json"
+            )
         )
-
-        # --------------------------------------------------------------
-        # DOMAIN
-        # --------------------------------------------------------------
 
         domain = urlparse(
             plan.url
         ).netloc
 
-        # --------------------------------------------------------------
-        # CATEGORY
-        # --------------------------------------------------------------
+        category = (
+            plan.url_type.value
+        )
 
-        category = plan.url_type.value
-
-        # --------------------------------------------------------------
-        # PHASE 6.7 — INTEGRATE INTO MAIN STORAGE
-        # --------------------------------------------------------------
+        # ----------------------------------------------------
+        # INTEGRATE
+        # ----------------------------------------------------
 
         (
             integrated_markdown,
             integrated_metadata,
         ) = (
             self.document_integrator.integrate(
-                markdown_path=markdown_path,
-                metadata_path=metadata_path,
+                markdown_path=(
+                    markdown_path
+                ),
+                metadata_path=(
+                    metadata_path
+                ),
                 domain=domain,
                 category=category,
             )
@@ -527,25 +895,70 @@ class CrawlEngine:
             integrated_metadata,
         )
 
-    # ------------------------------------------------------------------
+        # ----------------------------------------------------
+        # SUCCESS
+        # ----------------------------------------------------
+
+        self._set_url_status(
+            plan.url,
+            "success",
+            output=str(
+                integrated_markdown
+            ),
+        )
+
+        document_record = (
+            self.document_inventory.get(
+                plan.url
+            )
+        )
+
+        if document_record is not None:
+
+            document_record[
+                "status"
+            ] = "success"
+
+            document_record[
+                "output"
+            ] = str(
+                integrated_markdown
+            )
+
+            document_record[
+                "error"
+            ] = None
+
+    # ========================================================
     # START CRAWL
-    # ------------------------------------------------------------------
+    # ========================================================
 
     async def start(
         self,
         start_url: str,
         max_pages: int | None = 50,
-    ) -> None:
+    ) -> dict:
         """
-        Start crawling from the supplied root URL.
+        Start the crawl.
 
-        max_pages limits WEBPAGE crawling.
+        max_pages:
+
+            integer
+                TEST/LIMITED mode.
+
+            None
+                FULL mode: process webpages until the queue is
+                exhausted.
 
         Important:
 
-        DOCUMENT plans already discovered in the queue
-        are still processed after the page limit is reached.
+        max_pages counts WEBPAGE ATTEMPTS, not only successful
+        webpages.
+
+        DOCUMENT plans are not limited by max_pages.
         """
+
+        self._reset_state()
 
         normalized_start_url = (
             start_url.strip()
@@ -554,16 +967,45 @@ class CrawlEngine:
         if not normalized_start_url:
 
             raise ValueError(
-                "Start URL cannot be empty"
+                "Start URL cannot be empty."
             )
 
-        # --------------------------------------------------------------
-        # ROOT DOMAIN
-        # --------------------------------------------------------------
+        # ----------------------------------------------------
+        # VALIDATE PAGE LIMIT
+        # ----------------------------------------------------
 
-        base_domain = urlparse(
+        if (
+            max_pages is not None
+            and max_pages < 0
+        ):
+
+            raise ValueError(
+                "max_pages must be >= 0 or None."
+            )
+
+        self.start_url = (
             normalized_start_url
-        ).netloc
+        )
+
+        self.max_pages = (
+            max_pages
+        )
+
+        self.crawl_mode = (
+            "FULL"
+            if max_pages is None
+            else "LIMITED"
+        )
+
+        # ----------------------------------------------------
+        # ROOT DOMAIN
+        # ----------------------------------------------------
+
+        base_domain = (
+            urlparse(
+                normalized_start_url
+            ).netloc
+        )
 
         if not base_domain:
 
@@ -572,9 +1014,13 @@ class CrawlEngine:
                 f"{normalized_start_url}"
             )
 
-        # --------------------------------------------------------------
-        # ROOT URL
-        # --------------------------------------------------------------
+        self.base_domain = (
+            base_domain
+        )
+
+        # ----------------------------------------------------
+        # ROOT URL INFO
+        # ----------------------------------------------------
 
         root_url_info = classify_url(
             normalized_start_url,
@@ -584,63 +1030,148 @@ class CrawlEngine:
         )
 
         root_info = URLInfo(
-            raw_url=normalized_start_url,
-            normalized_url=normalized_start_url,
-            url_type=root_url_info.url_type,
-            discovered_from=normalized_start_url,
+            raw_url=(
+                normalized_start_url
+            ),
+            normalized_url=(
+                normalized_start_url
+            ),
+            url_type=(
+                root_url_info.url_type
+            ),
+            discovered_from=(
+                normalized_start_url
+            ),
             depth=0,
         )
 
-        root_plan = self.policy.create_plan(
-            root_info,
-            depth=0,
-        )
-
-        if (
-            root_plan.action
-            == CrawlAction.IGNORE
-        ):
-
-            self.ignored_plans += 1
-
-        else:
-
-            self.queue.enqueue(
-                root_plan
+        root_plan = (
+            self.policy.create_plan(
+                root_info,
+                depth=0,
             )
+        )
 
-        # --------------------------------------------------------------
+        # ----------------------------------------------------
+        # REGISTER ROOT
+        # ----------------------------------------------------
+
+        root_is_new = (
+            self._register_url(
+                plan=root_plan,
+                source_url=(
+                    normalized_start_url
+                ),
+            )
+        )
+
+        if root_is_new:
+
+            if (
+                root_plan.action
+                == CrawlAction.IGNORE
+            ):
+
+                self.ignored_plans += 1
+
+                self._set_url_status(
+                    normalized_start_url,
+                    "ignored",
+                )
+
+            else:
+
+                self.queue.enqueue(
+                    root_plan
+                )
+
+                self.queue_enqueued += 1
+
+                self._set_url_status(
+                    normalized_start_url,
+                    "queued",
+                )
+
+                if (
+                    root_plan.action
+                    == CrawlAction.DOCUMENT
+                ):
+
+                    self.document_inventory[
+                        normalized_start_url
+                    ] = {
+                        "url": (
+                            normalized_start_url
+                        ),
+                        "url_type": (
+                            root_plan
+                            .url_type
+                            .value
+                        ),
+                        "depth": 0,
+                        "discovered_from": [
+                            normalized_start_url
+                        ],
+                        "status": "queued",
+                        "output": None,
+                        "error": None,
+                    }
+
+                    self.documents_discovered = (
+                        len(
+                            self.document_inventory
+                        )
+                    )
+
+        # ----------------------------------------------------
         # CRAWL LOOP
-        # --------------------------------------------------------------
+        # ----------------------------------------------------
 
         while not self.queue.is_empty():
 
-            plan = self.queue.dequeue()
+            plan = (
+                self.queue.dequeue()
+            )
 
             if plan is None:
                 break
 
-            # ----------------------------------------------------------
+            # =================================================
             # WEBPAGE
-            # ----------------------------------------------------------
+            # =================================================
 
-            if plan.action == CrawlAction.CRAWL:
+            if (
+                plan.action
+                == CrawlAction.CRAWL
+            ):
 
-                # ------------------------------------------------------
-                # PAGE LIMIT
-                #
-                # Do NOT break the entire queue.
-                #
-                # Skip additional WEBPAGE plans only.
-                # DOCUMENT plans must still be processed.
-                # ------------------------------------------------------
+                # -------------------------------------------------
+                # WEBPAGE LIMIT
+                # -------------------------------------------------
 
                 if (
                     max_pages is not None
-                    and self.pages_crawled >= max_pages
+                    and self.pages_attempted
+                    >= max_pages
                 ):
 
+                    self.pages_skipped_limit += 1
+
+                    self._set_url_status(
+                        plan.url,
+                        "skipped_page_limit",
+                    )
+
+                    print(
+                        "Skipping webpage due to "
+                        "max_pages:",
+                        plan.url,
+                    )
+
                     continue
+
+                # Count ATTEMPT before executing.
+                self.pages_attempted += 1
 
                 try:
 
@@ -654,21 +1185,38 @@ class CrawlEngine:
 
                     self.failed_pages += 1
 
+                    error_text = (
+                        f"{type(error).__name__}: "
+                        f"{error}"
+                    )
+
+                    self._set_url_status(
+                        plan.url,
+                        "failed",
+                        error=error_text,
+                    )
+
                     print(
                         "\nPAGE FAILED:",
                         plan.url,
                     )
 
                     print(
-                        f"{type(error).__name__}: "
-                        f"{error}"
+                        error_text
                     )
 
-            # ----------------------------------------------------------
-            # DOCUMENT
-            # ----------------------------------------------------------
+                    # IMPORTANT:
+                    # Do NOT stop the crawl.
+                    continue
 
-            elif plan.action == CrawlAction.DOCUMENT:
+            # =================================================
+            # DOCUMENT
+            # =================================================
+
+            elif (
+                plan.action
+                == CrawlAction.DOCUMENT
+            ):
 
                 try:
 
@@ -676,7 +1224,41 @@ class CrawlEngine:
                         plan
                     )
 
+                    self.documents_processed += 1
+
                 except Exception as error:
+
+                    self.failed_documents += 1
+
+                    error_text = (
+                        f"{type(error).__name__}: "
+                        f"{error}"
+                    )
+
+                    self._set_url_status(
+                        plan.url,
+                        "failed",
+                        error=error_text,
+                    )
+
+                    document_record = (
+                        self.document_inventory.get(
+                            plan.url
+                        )
+                    )
+
+                    if (
+                        document_record
+                        is not None
+                    ):
+
+                        document_record[
+                            "status"
+                        ] = "failed"
+
+                        document_record[
+                            "error"
+                        ] = error_text
 
                     print(
                         "\nDOCUMENT FAILED:",
@@ -684,114 +1266,360 @@ class CrawlEngine:
                     )
 
                     print(
-                        f"{type(error).__name__}: "
-                        f"{error}"
+                        error_text
                     )
 
-            # ----------------------------------------------------------
+                    # Continue to next queue item.
+                    continue
+
+            # =================================================
             # RESOURCE
-            # ----------------------------------------------------------
+            # =================================================
 
-            elif plan.action == CrawlAction.RESOURCE:
+            elif (
+                plan.action
+                == CrawlAction.RESOURCE
+            ):
 
-                # Images/resources remain intentionally ignored.
+                self._set_url_status(
+                    plan.url,
+                    "ignored_resource",
+                )
+
                 continue
 
-        # --------------------------------------------------------------
-        # FINAL STATISTICS
-        # --------------------------------------------------------------
+            else:
+
+                self._set_url_status(
+                    plan.url,
+                    "unknown_action",
+                )
+
+        # ----------------------------------------------------
+        # FINAL SUMMARY
+        # ----------------------------------------------------
+
+        report = (
+            self._build_report()
+        )
+
+        self._print_summary(
+            report
+        )
+
+        self._write_report(
+            report
+        )
+
+        return report
+
+    # ========================================================
+    # BUILD REPORT
+    # ========================================================
+
+    def _build_report(
+        self,
+    ) -> dict:
+
+        status_counts = {}
+
+        for record in (
+            self.url_inventory.values()
+        ):
+
+            status = record.get(
+                "status",
+                "unknown",
+            )
+
+            status_counts[
+                status
+            ] = (
+                status_counts.get(
+                    status,
+                    0,
+                )
+                + 1
+            )
+
+        report = {
+            "crawl": {
+                "start_url": self.start_url,
+                "base_domain": self.base_domain,
+                "mode": self.crawl_mode,
+                "max_pages": self.max_pages,
+            },
+
+            "statistics": {
+                "unique_urls_discovered": (
+                    self.unique_urls_discovered
+                ),
+                "queue_enqueued": (
+                    self.queue_enqueued
+                ),
+                "duplicate_urls_skipped": (
+                    self.duplicate_urls_skipped
+                ),
+                "pages_attempted": (
+                    self.pages_attempted
+                ),
+                "pages_crawled": (
+                    self.pages_crawled
+                ),
+                "failed_pages": (
+                    self.failed_pages
+                ),
+                "pages_skipped_limit": (
+                    self.pages_skipped_limit
+                ),
+                "documents_discovered": (
+                    self.documents_discovered
+                ),
+                "documents_processed": (
+                    self.documents_processed
+                ),
+                "failed_documents": (
+                    self.failed_documents
+                ),
+                "resources_discovered": (
+                    self.resources_discovered
+                ),
+                "ignored_plans": (
+                    self.ignored_plans
+                ),
+                "tracked_urls": (
+                    self.depth_tracker.size()
+                ),
+                "remaining_queue": (
+                    self.queue.size()
+                ),
+            },
+
+            "status_counts": (
+                status_counts
+            ),
+
+            "queue_exhausted": (
+                self.queue.is_empty()
+            ),
+
+            "document_inventory": (
+                list(
+                    self.document_inventory.values()
+                )
+            ),
+
+            "url_inventory": (
+                list(
+                    self.url_inventory.values()
+                )
+            ),
+        }
+
+        return report
+
+    # ========================================================
+    # PRINT SUMMARY
+    # ========================================================
+
+    def _print_summary(
+        self,
+        report: dict,
+    ) -> None:
+
+        stats = report[
+            "statistics"
+        ]
 
         print(
             "\n========== Crawl Finished =========="
         )
 
         print(
+            "Mode                :",
+            report["crawl"]["mode"],
+        )
+
+        print(
+            "Start URL           :",
+            report["crawl"]["start_url"],
+        )
+
+        print(
+            "Base Domain         :",
+            report["crawl"]["base_domain"],
+        )
+
+        print(
+            "Unique URLs         :",
+            stats[
+                "unique_urls_discovered"
+            ],
+        )
+
+        print(
+            "Queue Enqueued      :",
+            stats[
+                "queue_enqueued"
+            ],
+        )
+
+        print(
+            "Duplicate URLs      :",
+            stats[
+                "duplicate_urls_skipped"
+            ],
+        )
+
+        print(
+            "Pages Attempted     :",
+            stats[
+                "pages_attempted"
+            ],
+        )
+
+        print(
             "Pages Crawled       :",
-            self.pages_crawled,
-        )
-
-        print(
-            "Documents Discovered:",
-            self.documents_discovered,
-        )
-
-        print(
-            "Resources Discovered:",
-            self.resources_discovered,
-        )
-
-        print(
-            "Ignored Plans       :",
-            self.ignored_plans,
+            stats[
+                "pages_crawled"
+            ],
         )
 
         print(
             "Failed Pages        :",
-            self.failed_pages,
+            stats[
+                "failed_pages"
+            ],
+        )
+
+        print(
+            "Skipped Page Limit  :",
+            stats[
+                "pages_skipped_limit"
+            ],
+        )
+
+        print(
+            "Documents Discovered:",
+            stats[
+                "documents_discovered"
+            ],
+        )
+
+        print(
+            "Documents Processed :",
+            stats[
+                "documents_processed"
+            ],
+        )
+
+        print(
+            "Failed Documents    :",
+            stats[
+                "failed_documents"
+            ],
+        )
+
+        print(
+            "Resources           :",
+            stats[
+                "resources_discovered"
+            ],
+        )
+
+        print(
+            "Ignored Plans       :",
+            stats[
+                "ignored_plans"
+            ],
         )
 
         print(
             "Tracked URLs        :",
-            self.depth_tracker.size(),
+            stats[
+                "tracked_urls"
+            ],
         )
 
         print(
             "Remaining Queue     :",
-            self.queue.size(),
+            stats[
+                "remaining_queue"
+            ],
         )
 
-        # --------------------------------------------------------------
-        # DOCUMENT INVENTORY
-        # --------------------------------------------------------------
+        print(
+            "Queue Exhausted     :",
+            report[
+                "queue_exhausted"
+            ],
+        )
 
-        if self.document_inventory:
+        print(
+            "\n---------- URL STATUS COUNTS ----------"
+        )
 
-            print(
-                "\n---------- DOCUMENT INVENTORY ----------"
-            )
-
-            for index, document in enumerate(
-                self.document_inventory.values(),
-                start=1,
-            ):
-
-                print(
-                    f"\nDocument #{index}"
-                )
-
-                print(
-                    "URL       :",
-                    document["url"],
-                )
-
-                print(
-                    "Type      :",
-                    document["url_type"],
-                )
-
-                print(
-                    "Depth     :",
-                    document["depth"],
-                )
-
-                print(
-                    "Source Pages:",
-                    len(
-                        document[
-                            "discovered_from"
-                        ]
-                    ),
-                )
-
-                for source_page in document[
-                    "discovered_from"
-                ]:
-
-                    print(
-                        "  -",
-                        source_page,
-                    )
+        for status, count in sorted(
+            report[
+                "status_counts"
+            ].items()
+        ):
 
             print(
-                "\n----------------------------------------"
+                f"{status:24s}: {count}"
             )
+
+    # ========================================================
+    # WRITE REPORT
+    # ========================================================
+
+    def _write_report(
+        self,
+        report: dict,
+    ) -> Path:
+
+        domain = (
+            report["crawl"][
+                "base_domain"
+            ]
+            or "unknown"
+        )
+
+        safe_domain = (
+            re.sub(
+                r"[^a-zA-Z0-9._-]+",
+                "_",
+                domain,
+            )
+        )
+
+        output_dir = (
+            self.report_root
+            / safe_domain
+        )
+
+        output_dir.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+
+        output_path = (
+            output_dir
+            / "crawl_report.json"
+        )
+
+        output_path.write_text(
+            json.dumps(
+                report,
+                indent=4,
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+
+        print(
+            "Crawl Report        :",
+            output_path,
+        )
+
+        return output_path

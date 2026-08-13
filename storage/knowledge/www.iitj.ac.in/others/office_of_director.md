@@ -1,0 +1,82 @@
+###147852369$$$_RedirectToLoginPage_%%%963258741!!!
+[ ![IIT Jodhpur Home Page](https://www.iitj.ac.in/website/assets/images/home.png) ](https://www.iitj.ac.in/) [](https://www.iitj.ac.in/Main/en/Help) ![](https://www.iitj.ac.in/Website/assets/images/down-arrow.png) A+ A A- [ ](https://www.iitj.ac.in/Search?lg=en)
+  * English 
+  * Assamese (অসমীয়া)
+  * Bengali (বাংলা)
+  * Bodo (बड़ो)
+  * Dogri (डोगरी)
+  * Goan Konkani (गोवा कोंकणी)
+  * Gujarati (ગુજરાતી)
+  * Hindi (हिन्दी)
+  * Kannada (ಕನ್ನಡ)
+  * Kashmiri (कश्मीरी)
+  * Maithili (मैथिली)
+  * Malayalam (മലയാളം)
+  * Manipuri (মণিপুরী)
+  * Marathi (मराठी)
+  * Nepali (नेपाली)
+  * Odia (ଓଡ଼ିଆ)
+  * Punjabi (ਪੰਜਾਬੀ)
+  * Sanskrit (संस्कृत)
+  * Santali (संताली)
+  * Sindhi (سنڌي)
+  * Tamil (தமிழ்)
+  * Telugu (తెలుగు)
+  * Urdu (اردو)
+![feedback](https://translation-plugin.bhashini.co.in/v3/feedback.svg)
+Powered by[![Bhashini Logo](https://translation-plugin.bhashini.co.in/v3/bhashini-logo.png)](https://bhashini.gov.in)
+
+
+[ हिन्दी | ](https://www.iitj.ac.in/office-of-director/hi/office-of-director) [ Sitemap ](https://www.iitj.ac.in/AtoZ?lg=en)
+[ ![](https://www.iitj.ac.in/Website/assets/images/logo-1.png) ](https://www.iitj.ac.in/office-of-director/en/office-of-director)
+  * [ Home ](https://www.iitj.ac.in/office-of-director/en/office-of-director)
+  * [ People ](https://www.iitj.ac.in/People?dept=office-of-director)
+  * [ About Director ](https://www.iitj.ac.in/office-of-director/en/about-director)
+  * [ Contact ](https://www.iitj.ac.in/office-of-director/en/contact)
+
+
+[ ![IIT Jodhpur](https://www.iitj.ac.in/Website/assets/images/logo-1.png) Office of Director ](https://www.iitj.ac.in/office-of-director/en/office-of-director)
+[ ![Welcome image in Office of Director](https://www.iitj.ac.in/PageImages/Gallery/08-2025/Slider-638899022603503267.png) ](javascript:void\(0\))
+Previous Next pause
+#### Welcome to The Office of Director
+The Office of the Director at the Indian Institute of Technology Jodhpur is the central hub of leadership and governance, responsible for steering the institute towards its mission of excellence in education, research, and innovation. Our mission is to uphold and enhance the institute’s core values, ensuring the highest standards of academic and operational integrity. 
+The Director provides visionary leadership, setting strategic priorities and fostering a culture of continuous improvement and academic rigor. Our office oversees the implementation of policies, strategic planning, and resource allocation to ensure that IIT Jodhpur remains at the forefront of technological and scientific advancement. 
+We work closely with faculty, staff, students, and external stakeholders to promote a collaborative and inclusive environment. Key initiatives include advancing interdisciplinary research, expanding global partnerships, and enhancing the overall student experience through comprehensive support services and state-of-the-art facilities. 
+The Office of the Director is dedicated to fostering innovation and entrepreneurship, supporting initiatives that translate research into real-world applications and societal benefits. We also prioritize sustainability and social responsibility, integrating these principles into the institute’s strategic framework. 
+Our commitment to excellence is reflected in our continuous efforts to attract and retain outstanding talent, provide cutting-edge infrastructure, and cultivate a vibrant intellectual community.
+## Director Of IIT Jodhpur
+![Director Of IIT](https://www.iitj.ac.in/PageImages/Pages/10-2025/e2b0c265-4e00-4e3e-ba81-b34bb7d56958.jpeg)
+Professor Avinash Kumar Agarwal took over the charge of Director, IIT Jodhpur on 1 May 2024. He obtained his Undergraduate Degree in Mechanical Engineering (1994) from Malviya Regional Engineering College, Jaipur and his MTech (Energy, 1996) and PhD (Energy, 1999) from the Indian Institute of Technology (IIT) Delhi. After his Post-Doctoral Fellowship (1999 – 2001) at the ERC, UW, Madison, USA, he returned to India in 2001 and joined IIT Kanpur. He was a Visiting Professor at the University of Loughborough, UK; Photonics Institute, University of Vienna, Austria; Hanyang University and KAIST, South Korea. Prof. Agarwal is interested in research in IC engines, combustion, conventional and alternative fuels, Methanol/ DME/ Hydrogen/ HCNG fuelled engine development, LCA and TCO analyses, Fuel sprays, Lubricating oil tribology, optical diagnostics, laser ignition, HCCI, particulates and emission control, and large bore engines.
+He has developed laser-fired hydrogen and CNG engines in automotive sizes and developed the first electronic fuel injection system equipped with a locomotive engine for Indian Railways. Currently, Prof. Agarwal is developing Methanol and DME-fuelled engines/ vehicles for the automotive/ agricultural sectors. 
+[Read More](https://www.iitj.ac.in/office-of-director/en/about-director)
+[Important links](https://www.iitj.ac.in/main/en/important-links)
+[CCCD @ IITJ](https://sites.google.com/iitj.ac.in/cccd)
+[Recruitment](https://www.iitj.ac.in/main/en/recruitments)
+[Correspondence](https://www.iitj.ac.in/correspondence)
+[RTI](https://www.iitj.ac.in/rti)
+[Tenders](https://www.iitj.ac.in/office-of-stores-purchase/en/tender-details)
+[Techscape](https://www.iitj.ac.in/techscape/en/Techscape)
+[Contact](https://www.iitj.ac.in/main/en/contact)
+[Old Website](https://old.iitj.ac.in/)
+[NCCR Portal](https://cybercrime.gov.in/)
+[How To Reach IITJ](https://www.iitj.ac.in/main/en/how-to-reach-iit-jodhpur)
+[Institute Repository](https://www.iitj.ac.in/Institute-Repository/en/Institute-Repository)
+[Donations](https://www.iitj.ac.in/office-of-corporate-relations/en/Donate)
+[Web Policy](https://www.iitj.ac.in/main/en/web-policy)
+[Web Information Manager](https://www.iitj.ac.in/main/en/web-information-manager)
+[Feedback](https://www.iitj.ac.in/feedback)
+[CERT-IN](https://www.cert-in.org.in/)
+[Help](https://www.iitj.ac.in/main/en/Help)
+[NIRF](https://www.iitj.ac.in/institute-repository/en/nirf)
+[Internal Committee](https://www.iitj.ac.in/anti-sexual-harassment-policy/en/anti-sexual-harassment-policy)
+[Intranet Links](https://www.iitj.ac.in/main/en/intranet-page)
+[ ![IIT Jodhpur Facebook Page](https://www.iitj.ac.in/PageImages/Pages/10-2024/9a1e918c-86af-4667-a7ed-0b3c4e388af8.png) ](https://www.facebook.com/IITJOfficial/) [ ![IIT Jodhpur Twitter Page](https://www.iitj.ac.in/PageImages/Pages/10-2024/557ce2f7-66a1-4e50-91f7-27accb076dac.png) ](https://twitter.com/iitjodhpur) [ ![IIT Jodhpur You tube Channel](https://www.iitj.ac.in/PageImages/Pages/10-2024/316f8fa0-09ee-4358-8602-ce161edbe82d.png) ](https://www.youtube.com/channel/UCFfCylvEDIB1IH4GaRVRyLA) [ ![IIT Jodhpur Instagram Page](https://www.iitj.ac.in/PageImages/Pages/10-2024/12f44380-5332-4d35-8fef-f1ad56a7aef1.png) ](https://www.instagram.com/iitj_official_account/) [ ![IIT Jodhpur Linkedin Page](https://www.iitj.ac.in/PageImages/Pages/10-2024/0dcc5dd3-e0d2-48d0-a8ae-94c3f020ae8d.png) ](https://in.linkedin.com/school/iitjodhpur/)
+[ ![G20 India 2023](https://www.iitj.ac.in/PageImages/Pages/05-2024/8ed02fda-8d75-42a9-890a-71be04908de5.jpg) ](https://www.g20.in/en/) [ ![75 Azadi Ka Amrit Mahotsav](https://www.iitj.ac.in/PageImages/Pages/07-2024/015e1ed5-3528-40db-bb91-4de20409b667.jpg) ](https://amritmahotsav.nic.in/) [ ![Prime Minister's Research Fellowship \(PMRF\)](https://www.iitj.ac.in/PageImages/Pages/08-2024/7f1a6ad9-676d-41d5-ab04-8d3913de04f9.jpg) ](https://www.pmrf.in/) [ ![Vidya Lakshmi Fulfilling Educational Aspirations](https://www.iitj.ac.in/PageImages/Pages/08-2024/e46806a7-819a-48ec-8be1-b43ebf1a8f55.png) ](https://www.vidyalakshmi.co.in/Students/) [ ![National Commission for Women \(NCW\) Helpline](https://www.iitj.ac.in/PageImages/Pages/08-2024/a99ac780-b5fd-4e87-bbbf-dff0ded298ee.png) ](https://www.ncwwomenhelpline.in/) [ ![National Anti-Ragging Monitoring Agency](https://www.iitj.ac.in/PageImages/Pages/08-2024/8c1aae6b-e821-4980-8fd4-bf7eeb10a265.png) ](https://www.antiragging.in/) [ ![india.gov.in National portal of India](https://www.iitj.ac.in/PageImages/Pages/07-2025/9e0768f4-6213-4737-aaec-151ec4f03462.jpg) ](https://www.india.gov.in/)
+Copyright © 2025 All Rights Reserved | This Portal is Owned, Designed, and Developed by [Digital Infrastructure & Automation](https://www.iitj.ac.in/dia/en/dia), IIT Jodhpur. [ N.H. 62, Nagaur Road, Karwar, Jodhpur - 342030, Rajasthan (India)](https://maps.app.goo.gl/E4e6rbcTydaJZyiX9)
+For any comments/enquiries/feedback, please email the [WIM](https://www.iitj.ac.in/main/en/web-information-manager).
+Last Updated : 17 Oct 2025 - 09:44 AM
+###147852369$$$_RedirectToLoginPage_%%%963258741!!!
+arrow_downward️
+## Rate this translation
+Do you like to give feedback
+Submit

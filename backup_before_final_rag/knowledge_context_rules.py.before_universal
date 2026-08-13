@@ -1,0 +1,275 @@
+"""
+Phase 8.3 — Document Context Rules
+
+Deterministic context overrides for cases where the section heading
+alone is too ambiguous.
+
+No LLM.
+"""
+
+from __future__ import annotations
+
+from processors.knowledge_taxonomy import classify
+
+
+def classify_with_context(
+    *,
+    heading: str,
+    text: str,
+    source_name: str,
+    document_title: str,
+    document_url: str,
+) -> dict:
+
+    h = (heading or "").lower()
+    t = (text or "").lower()
+    src = (source_name or "").lower()
+    title = (document_title or "").lower()
+    url = (document_url or "").lower()
+
+    context = " ".join(
+        [h, t, src, title, url]
+    )
+
+    # ---------------------------------------------------------------
+    # ACADEMIC REGULATIONS / RULEBOOKS
+    # ---------------------------------------------------------------
+
+    if (
+        "academic_regulations" in src
+        or "academic regulation" in title
+        or "academic regulations" in title
+    ):
+        if any(
+            term in h
+            for term in (
+                "regulation",
+                "academic session",
+                "academic",
+                "program",
+                "programme",
+                "leave",
+                "withdrawal",
+                "graduation",
+                "requirements",
+                "admission",
+                "reservation",
+                "research supervisor",
+                "research proposal",
+                "ph.d",
+                "phd",
+                "b.tech",
+                "m.tech",
+                "m.sc",
+            )
+        ):
+            return {
+                "domain": "academics",
+                "category": "academic_rules_and_regulations",
+                "subcategory": "academic_rules_and_regulations",
+                "confidence": "high",
+                "score": 200,
+            }
+
+    # ---------------------------------------------------------------
+    # TIMETABLE / CLASS SCHEDULE
+    # ---------------------------------------------------------------
+
+    if any(
+        marker in src
+        for marker in (
+            "time_table",
+            "timetable",
+            "class_time",
+            "class_schedule",
+        )
+    ) or any(
+        marker in title
+        for marker in (
+            "time table",
+            "timetable",
+            "class schedule",
+            "class timetable",
+        )
+    ):
+        return {
+            "domain": "academics",
+            "category": "academic_calendar",
+            "subcategory": "academic_calendar",
+            "confidence": "high",
+            "score": 200,
+        }
+
+    # ---------------------------------------------------------------
+    # HEALTH CENTRE
+    # ---------------------------------------------------------------
+
+    if (
+        "health_center" in src
+        or "health centre" in title
+        or "health center" in title
+    ):
+        return {
+            "domain": "health_safety_and_wellbeing",
+            "category": "medical_services",
+            "subcategory": "medical_services",
+            "confidence": "high",
+            "score": 200,
+        }
+
+    # ---------------------------------------------------------------
+    # LAB / FACILITY PAGES
+    # ---------------------------------------------------------------
+
+    if any(
+        marker in src
+        for marker in (
+            "_lab",
+            "_laboratory",
+            "laboratory_",
+            "fab_facility",
+            "_facility",
+        )
+    ):
+        if any(
+            marker in context
+            for marker in (
+                "equipment",
+                "laboratory",
+                "lab",
+                "facility",
+                "instrument",
+                "infrastructure",
+                "sample",
+            )
+        ):
+            return {
+                "domain": "facilities_and_infrastructure",
+                "category": "laboratories",
+                "subcategory": "laboratories",
+                "confidence": "high",
+                "score": 190,
+            }
+
+    # ---------------------------------------------------------------
+    # DOCTORAL / DEGREE PROGRAM PAGES
+    # ---------------------------------------------------------------
+
+    if any(
+        marker in src
+        for marker in (
+            "doctoral_program",
+            "doctorial_program",
+            "phd",
+            "undergraduate_program",
+            "undergraduate_programs",
+            "postgraduate_program",
+            "postgraduate_programs",
+            "mtech",
+            "m_sc",
+        )
+    ):
+        return {
+            "domain": "academics",
+            "category": "programs",
+            "subcategory": "programs",
+            "confidence": "high",
+            "score": 185,
+        }
+
+    # ---------------------------------------------------------------
+    # CURRICULUM
+    # ---------------------------------------------------------------
+
+    if (
+        "curriculum" in src
+        or "curriculum" in title
+        or "curricula" in title
+    ):
+        return {
+            "domain": "academics",
+            "category": "courses_and_curriculum",
+            "subcategory": "courses_and_curriculum",
+            "confidence": "high",
+            "score": 185,
+        }
+
+    # ---------------------------------------------------------------
+    # HEALTH / EMERGENCY
+    # ---------------------------------------------------------------
+
+    if any(
+        marker in context
+        for marker in (
+            "medical centre",
+            "medical center",
+            "health centre",
+            "health center",
+            "hospital",
+            "clinic",
+            "ambulance",
+        )
+    ):
+        return {
+            "domain": "health_safety_and_wellbeing",
+            "category": "medical_services",
+            "subcategory": "medical_services",
+            "confidence": "high",
+            "score": 170,
+        }
+
+    # ---------------------------------------------------------------
+    # TRANSPORT
+    # ---------------------------------------------------------------
+
+    if (
+        "transport" in src
+        or "transport" in title
+        or "transportation" in title
+    ):
+        return {
+            "domain": "campus",
+            "category": "transportation",
+            "subcategory": "transportation",
+            "confidence": "high",
+            "score": 170,
+        }
+
+    # ---------------------------------------------------------------
+    # FACILITIES RESOURCE PAGES
+    # ---------------------------------------------------------------
+
+    if (
+        "facilities" in src
+        or "facilities" in title
+        or "resources" in title
+    ):
+        if any(
+            marker in context
+            for marker in (
+                "facility",
+                "facilities",
+                "equipment",
+                "resource",
+                "infrastructure",
+            )
+        ):
+            return {
+                "domain": "facilities_and_infrastructure",
+                "category": "specialized_facilities",
+                "subcategory": "specialized_facilities",
+                "confidence": "high",
+                "score": 165,
+            }
+
+    # ---------------------------------------------------------------
+    # FALL BACK TO NORMAL TAXONOMY
+    # ---------------------------------------------------------------
+
+    return classify(
+        heading=heading,
+        text=text,
+        source_name=source_name,
+        document_title=document_title,
+        document_url=document_url,
+    )
