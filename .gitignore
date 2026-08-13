@@ -24,3 +24,18 @@ storage/test_real_output/
 storage/output/
 __pycache__/
 *.pyc
+
+
+# Generated knowledge pipeline artifacts
+storage/structured_knowledge/
+storage/organized_knowledge*/
+storage/rag_knowledge/
+storage/pipeline_reports/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Local test/generated artifacts
+test_documents/
+test_output/
