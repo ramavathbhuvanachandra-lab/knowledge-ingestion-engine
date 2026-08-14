@@ -1,0 +1,23 @@
+{
+  "phase": "8.5",
+  "document_id": "academic_programs__environment_and_sustainability",
+  "filename": "academic_programs__environment_and_sustainability.docx",
+  "title": "Academic Programs",
+  "domain": "www.iitj.ac.in",
+  "unit_count": 1,
+  "unit_ids": [
+    "b71fdae306361d9b"
+  ],
+  "source_documents": [
+    "storage/structured_knowledge/www.iitj.ac.in/others/ph_d_in_energy_and_automotive_engineering.json"
+  ],
+  "source_urls": [
+    "https://www.iitj.ac.in/enauto/en/PhD-in-energy"
+  ],
+  "taxonomy_categories": [
+    "campus/environment_and_sustainability/environment_and_sustainability"
+  ],
+  "coverage": {
+    "unit_count_matches_plan": true
+  }
+}

@@ -10,6 +10,7 @@ Input
 Output
 ------
 rag_plan.json
+rag_review_report.json
 
 Core rules
 ----------
@@ -21,13 +22,16 @@ Core rules
 6. Extremely large homogeneous groups are split only at
    source-document boundaries.
 7. Tiny groups are merged with compatible families.
-8. REVIEW knowledge is preserved in a protected buffer.
-9. Every non-NOISE unit appears exactly once.
-10. No LLM.
-11. No chunking.
-12. No embeddings.
-13. No vector database.
-14. No DOCX generation.
+8. Only RAG-eligible units are planned into Stage 3.
+9. EXCLUDE units never enter the Stage 3 RAG plan.
+10. REVIEW / AGGREGATE_ONLY units are preserved in a review report,
+    but are not silently placed into the final RAG.
+11. Every eligible RAG unit appears exactly once.
+12. No LLM.
+13. No chunking for normal groups.
+14. No embeddings.
+15. No vector database.
+16. No DOCX generation.
 """
 
 from __future__ import annotations
@@ -50,9 +54,6 @@ class KnowledgeRAGPlanner:
 
     # ================================================================
     # UNIVERSAL SEMANTIC FAMILIES
-    #
-    # These are based on generic college knowledge concepts.
-    # They are NOT tied to any specific institution.
     # ================================================================
 
     FAMILY_RULES = {
@@ -318,14 +319,13 @@ class KnowledgeRAGPlanner:
             "title": "Fees, Scholarships and Finance",
             "domains": {
                 "finance_and_fees",
-                "admissions",
             },
             "categories": {
                 "fees",
-                "scholarships",
                 "fellowships_and_stipends",
                 "financial_assistance",
-                "admission_fees",
+                "scholarships",
+                "finance",
             },
         },
 
@@ -337,38 +337,54 @@ class KnowledgeRAGPlanner:
             },
             "categories": {
                 "administrative_offices",
-                "registrar_and_establishment",
-                "directorate_and_deans",
                 "governance",
-                "statutory_bodies",
-                "institutional_rules",
-                "administrative_policies",
+                "administration",
             },
         },
 
         "events_and_notices": {
-            "title": "Events, Notices and Announcements",
+            "title": "Events and Notices",
             "domains": {
                 "events_and_activities",
                 "notices_and_announcements",
             },
             "categories": {
                 "events",
-                "festivals",
                 "seminars_and_workshops",
-                "conferences",
-                "outreach_and_public_engagement",
-                "academic_notices",
-                "admission_notices",
-                "student_notices",
-                "administrative_notices",
                 "general_announcements",
+                "notices",
+            },
+        },
+
+        "college_overview": {
+            "title": "Institute Overview",
+            "domains": {
+                "college_overview",
+                "institutes_centres_and_units",
+            },
+            "categories": {
+                "college_overview",
+                "institute_overview",
+            },
+        },
+
+        # Kept as a compatibility fallback only.
+        # REVIEW units are no longer planned here.
+        "review_and_special_content": {
+            "title": "Review and Special Content",
+            "domains": {
+                "review",
+            },
+            "categories": {
+                "ambiguous",
+                "uncategorized",
+                "weak_classification",
             },
         },
     }
 
     # ================================================================
-    # CONSTRUCTOR
+    # INITIALIZATION
     # ================================================================
 
     def __init__(
@@ -390,16 +406,21 @@ class KnowledgeRAGPlanner:
         domain: str,
     ) -> dict:
 
-        domain = (domain or "").strip()
-
-        if not domain:
-            raise ValueError(
-                "Domain cannot be empty."
-            )
-
         domain_root = (
             self.organized_root / domain
         )
+
+        if not domain_root.exists():
+            raise FileNotFoundError(
+                f"Organized domain does not exist: "
+                f"{domain_root}"
+            )
+
+        if not domain_root.is_dir():
+            raise ValueError(
+                f"Organized domain is not a directory: "
+                f"{domain_root}"
+            )
 
         manifest_path = (
             domain_root / "knowledge_units.json"
@@ -407,235 +428,323 @@ class KnowledgeRAGPlanner:
 
         if not manifest_path.exists():
             raise FileNotFoundError(
-                f"Knowledge-unit manifest does not exist: "
+                f"Knowledge manifest does not exist: "
                 f"{manifest_path}"
             )
 
-        data = json.loads(
-            manifest_path.read_text(
-                encoding="utf-8"
-            )
+        manifest = self._load_json(
+            manifest_path
         )
 
-        units = data.get(
+        all_units = manifest.get(
             "units",
             [],
         )
 
-        if not isinstance(units, list):
+        if not isinstance(
+            all_units,
+            list,
+        ):
             raise ValueError(
-                "'units' must be a list."
+                "'units' in knowledge_units.json "
+                "must be a list."
             )
 
-        useful_units = []
+        # ------------------------------------------------------------
+        # RAG ELIGIBILITY GATE
+        # ------------------------------------------------------------
 
-        for unit in units:
+        eligible_units = []
+        excluded_units = []
+        review_units = []
+        aggregate_units = []
+        unknown_status_units = []
 
-            if not isinstance(unit, dict):
-                continue
+        rag_tier_counts = Counter()
+        rag_status_counts = Counter()
 
-            if unit.get(
-                "decision",
-                "KEEP",
-            ) == "NOISE":
-                continue
+        for unit in all_units:
 
-            required = (
-                "unit_id",
-                "source_document",
-                "heading",
-                "text",
+            rag = unit.get(
+                "rag",
+                {},
             )
 
-            missing = [
-                field
-                for field in required
-                if not unit.get(field)
-            ]
+            if not isinstance(
+                rag,
+                dict,
+            ):
+                rag = {}
 
-            if missing:
-                raise ValueError(
-                    "Knowledge unit is missing "
-                    f"{missing}: {unit}"
+            status = str(
+                rag.get(
+                    "status",
+                    "",
+                )
+            ).upper()
+
+            tier = rag.get(
+                "tier"
+            )
+
+            if status == "KEEP":
+
+                eligible_units.append(
+                    unit
                 )
 
-            useful_units.append(unit)
+                if tier:
+                    rag_tier_counts[
+                        str(tier)
+                    ] += 1
 
-        if not useful_units:
+                rag_status_counts[
+                    "KEEP"
+                ] += 1
+
+            elif status == "EXCLUDE":
+
+                excluded_units.append(
+                    unit
+                )
+
+                rag_status_counts[
+                    "EXCLUDE"
+                ] += 1
+
+                if tier:
+                    rag_tier_counts[
+                        str(tier)
+                    ] += 1
+
+            elif status == "REVIEW":
+
+                review_units.append(
+                    unit
+                )
+
+                rag_status_counts[
+                    "REVIEW"
+                ] += 1
+
+            elif status == "AGGREGATE_ONLY":
+
+                aggregate_units.append(
+                    unit
+                )
+
+                rag_status_counts[
+                    "AGGREGATE_ONLY"
+                ] += 1
+
+            else:
+
+                unknown_status_units.append(
+                    unit
+                )
+
+                rag_status_counts[
+                    "UNKNOWN"
+                ] += 1
+
+                # Safety-first behavior:
+                # unknown RAG status never silently enters
+                # the final student RAG.
+                review_units.append(
+                    unit
+                )
+
+        # ------------------------------------------------------------
+        # HARD SAFETY CHECK
+        # ------------------------------------------------------------
+
+        if unknown_status_units:
+
+            unit_ids = [
+                unit.get(
+                    "unit_id"
+                )
+                for unit in unknown_status_units
+            ]
+
             raise ValueError(
-                f"No useful knowledge units found for {domain}."
+                "Knowledge units contain unknown/missing "
+                f"RAG status: {unit_ids[:20]}"
             )
 
         # ------------------------------------------------------------
-        # CREATE INITIAL SEMANTIC FAMILIES
+        # DEDUPLICATION CHECK
         # ------------------------------------------------------------
 
-        groups = defaultdict(list)
+        self._validate_unique_ids(
+            all_units,
+            label="input knowledge units",
+        )
 
-        for unit in useful_units:
+        self._validate_unique_ids(
+            eligible_units,
+            label="RAG eligible units",
+        )
+
+        # ------------------------------------------------------------
+        # BUILD SEMANTIC GROUPS
+        # ------------------------------------------------------------
+
+        groups: dict[
+            str,
+            list[dict]
+        ] = defaultdict(list)
+
+        for unit in eligible_units:
 
             family = self._resolve_family(
                 unit
             )
 
-            groups[family].append(unit)
-
-        # ------------------------------------------------------------
-        # PROTECT REVIEW
-        # ------------------------------------------------------------
-
-        review_units = [
-            unit
-            for unit in useful_units
-            if unit.get(
-                "taxonomy_domain"
-            ) == "review"
-        ]
-
-        if review_units:
-
-            groups = {
-                key: value
-                for key, value
-                in groups.items()
-                if key != "review_and_special_content"
-            }
-
             groups[
-                "review_and_special_content"
-            ] = review_units
-
-        # ------------------------------------------------------------
-        # MERGE TINY FAMILIES
-        # ------------------------------------------------------------
-
-        groups = (
-            self._merge_tiny_families(
-                groups
+                family
+            ].append(
+                unit
             )
+
+        groups = self._merge_tiny_families(
+            groups
+        )
+
+        groups = self._split_large_families(
+            groups
+        )
+
+        documents = self._build_documents(
+            groups
         )
 
         # ------------------------------------------------------------
-        # SPLIT LARGE FAMILIES
-        # ------------------------------------------------------------
-
-        groups = (
-            self._split_large_families(
-                groups
-            )
-        )
-
-        # ------------------------------------------------------------
-        # BUILD DOCUMENTS
-        # ------------------------------------------------------------
-
-        documents = (
-            self._build_documents(
-                groups
-            )
-        )
-
-        # ------------------------------------------------------------
-        # VALIDATE
+        # ELIGIBLE UNIT COVERAGE
         # ------------------------------------------------------------
 
         self._validate_coverage(
-            useful_units,
+            eligible_units,
             documents,
         )
 
         # ------------------------------------------------------------
-        # STATISTICS
+        # REVIEW REPORT
         # ------------------------------------------------------------
 
-        topic_counts = Counter()
-        taxonomy_counts = Counter()
+        review_report = (
+            self._build_review_report(
+                domain=domain,
+                all_units=all_units,
+                excluded_units=excluded_units,
+                review_units=review_units,
+                aggregate_units=aggregate_units,
+                rag_tier_counts=rag_tier_counts,
+                rag_status_counts=rag_status_counts,
+            )
+        )
 
-        for unit in useful_units:
+        review_path = (
+            domain_root
+            / "rag_review_report.json"
+        )
 
-            topic_counts[
-                unit.get(
-                    "topic",
-                    "other",
-                )
-            ] += 1
-
-            taxonomy_counts[
-                self._taxonomy_key(unit)
-            ] += 1
+        review_path.write_text(
+            json.dumps(
+                review_report,
+                indent=4,
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
 
         # ------------------------------------------------------------
-        # PLAN
+        # FINAL PLAN
         # ------------------------------------------------------------
 
         plan = {
-            "version": "4.0",
-
+            "phase": "8.4",
             "planner": (
-                "KnowledgeRAGPlanner"
+                "universal_dynamic_rag_planner"
             ),
-
-            "strategy": (
-                "universal_semantic_family_grouping"
-            ),
-
             "domain": domain,
 
-            "input_manifest": str(
-                manifest_path
+            "input_units": len(
+                all_units
             ),
 
-            "input_units": len(
-                useful_units
+            "rag_eligible_units": len(
+                eligible_units
+            ),
+
+            "excluded_units": len(
+                excluded_units
+            ),
+
+            "review_units": len(
+                review_units
+            ),
+
+            "aggregate_only_units": len(
+                aggregate_units
             ),
 
             "rag_documents": len(
                 documents
             ),
 
-            "document_count_is_dynamic": True,
-
-            "size_policy": {
-                "semantic_coherence_first": True,
-                "soft_large_threshold": (
-                    self.SOFT_LARGE_THRESHOLD
-                ),
-                "hard_large_threshold": (
-                    self.HARD_LARGE_THRESHOLD
-                ),
-                "small_group_threshold": (
-                    self.SMALL_GROUP_THRESHOLD
-                ),
-            },
-
-            "topic_counts": dict(
+            "rag_tier_counts": dict(
                 sorted(
-                    topic_counts.items()
+                    rag_tier_counts.items()
+                )
+            ),
+
+            "rag_status_counts": dict(
+                sorted(
+                    rag_status_counts.items()
                 )
             ),
 
             "taxonomy_counts": dict(
                 sorted(
-                    taxonomy_counts.items()
+                    self._taxonomy_counts(
+                        eligible_units
+                    ).items()
                 )
             ),
 
             "coverage": {
                 "input_units": len(
-                    useful_units
+                    all_units
+                ),
+
+                "eligible_units": len(
+                    eligible_units
                 ),
 
                 "planned_units": sum(
                     document[
                         "unit_count"
                     ]
-                    for document
-                    in documents
+                    for document in documents
+                ),
+
+                "excluded_units": len(
+                    excluded_units
+                ),
+
+                "review_units": len(
+                    review_units
+                ),
+
+                "aggregate_only_units": len(
+                    aggregate_units
                 ),
 
                 "missing_units": 0,
                 "extra_units": 0,
                 "duplicate_units": 0,
+
                 "coverage_complete": True,
             },
 
@@ -673,19 +782,93 @@ class KnowledgeRAGPlanner:
 
         print(
             "Input units:",
-            plan["input_units"],
+            plan[
+                "input_units"
+            ],
+        )
+
+        print(
+            "RAG eligible units:",
+            plan[
+                "rag_eligible_units"
+            ],
+        )
+
+        print(
+            "Tier A kept:",
+            plan[
+                "rag_tier_counts"
+            ].get(
+                "A",
+                0,
+            ),
+        )
+
+        print(
+            "Tier B kept:",
+            plan[
+                "rag_tier_counts"
+            ].get(
+                "B",
+                0,
+            ),
+        )
+
+        print(
+            "Tier C kept:",
+            plan[
+                "rag_tier_counts"
+            ].get(
+                "C",
+                0,
+            ),
+        )
+
+        print(
+            "Tier D excluded:",
+            plan[
+                "rag_tier_counts"
+            ].get(
+                "D",
+                0,
+            ),
+        )
+
+        print(
+            "Review:",
+            plan[
+                "review_units"
+            ],
+        )
+
+        print(
+            "Aggregate-only:",
+            plan[
+                "aggregate_only_units"
+            ],
+        )
+
+        print(
+            "Excluded:",
+            plan[
+                "excluded_units"
+            ],
         )
 
         print(
             "RAG documents:",
-            plan["rag_documents"],
+            plan[
+                "rag_documents"
+            ],
         )
 
         print(
             "Coverage:",
             (
                 "PASS"
-                if plan["coverage"][
+                if plan[
+                    "coverage"
+                ][
                     "coverage_complete"
                 ]
                 else "FAIL"
@@ -693,8 +876,9 @@ class KnowledgeRAGPlanner:
         )
 
         print()
-
-        print("RAG DOCUMENT PLAN")
+        print(
+            "RAG DOCUMENT PLAN"
+        )
 
         for document in documents:
 
@@ -705,6 +889,12 @@ class KnowledgeRAGPlanner:
             )
 
         print()
+
+        print(
+            "Review report:",
+            review_path,
+        )
+
         print(
             "Plan:",
             output_path,
@@ -720,13 +910,6 @@ class KnowledgeRAGPlanner:
         self,
         unit: dict,
     ) -> str:
-
-        if unit.get(
-            "taxonomy_domain"
-        ) == "review":
-            return (
-                "review_and_special_content"
-            )
 
         domain = self._normalize(
             unit.get(
@@ -755,17 +938,22 @@ class KnowledgeRAGPlanner:
         ):
 
             if (
-                domain in rule["domains"]
+                domain
+                in rule[
+                    "domains"
+                ]
                 and category
-                in rule["categories"]
+                in rule[
+                    "categories"
+                ]
             ):
+
                 matches.append(
                     family_name
                 )
 
         if matches:
 
-            # More specific families first.
             return sorted(
                 matches
             )[0]
@@ -833,7 +1021,7 @@ class KnowledgeRAGPlanner:
 
         return domain_fallbacks.get(
             domain,
-            "review_and_special_content",
+            "college_overview",
         )
 
     # ================================================================
@@ -842,8 +1030,14 @@ class KnowledgeRAGPlanner:
 
     def _merge_tiny_families(
         self,
-        groups: dict[str, list[dict]],
-    ) -> dict[str, list[dict]]:
+        groups: dict[
+            str,
+            list[dict]
+        ],
+    ) -> dict[
+        str,
+        list[dict]
+    ]:
 
         result = {
             key: list(value)
@@ -865,8 +1059,6 @@ class KnowledgeRAGPlanner:
                     len(units)
                     <= self.SMALL_GROUP_THRESHOLD
                 )
-                and key
-                != "review_and_special_content"
             ]
 
             for source_key in small:
@@ -904,7 +1096,10 @@ class KnowledgeRAGPlanner:
     def _nearest_family(
         self,
         source_key: str,
-        groups: dict[str, list[dict]],
+        groups: dict[
+            str,
+            list[dict]
+        ],
     ) -> str | None:
 
         source_units = groups.get(
@@ -932,12 +1127,6 @@ class KnowledgeRAGPlanner:
             if target_key == source_key:
                 continue
 
-            if (
-                target_key
-                == "review_and_special_content"
-            ):
-                continue
-
             if not target_units:
                 continue
 
@@ -954,6 +1143,7 @@ class KnowledgeRAGPlanner:
                 source_domain
                 == target_domain
             ):
+
                 score += 100
 
             source_categories = {
@@ -963,8 +1153,7 @@ class KnowledgeRAGPlanner:
                         "",
                     )
                 )
-                for unit
-                in source_units
+                for unit in source_units
             }
 
             target_categories = {
@@ -974,8 +1163,7 @@ class KnowledgeRAGPlanner:
                         "",
                     )
                 )
-                for unit
-                in target_units
+                for unit in target_units
             }
 
             score += 10 * len(
@@ -984,6 +1172,7 @@ class KnowledgeRAGPlanner:
             )
 
             if score > best_score:
+
                 best_score = score
                 best = target_key
 
@@ -995,8 +1184,14 @@ class KnowledgeRAGPlanner:
 
     def _split_large_families(
         self,
-        groups: dict[str, list[dict]],
-    ) -> dict[str, list[dict]]:
+        groups: dict[
+            str,
+            list[dict]
+        ],
+    ) -> dict[
+        str,
+        list[dict]
+    ]:
 
         result = {}
 
@@ -1009,18 +1204,6 @@ class KnowledgeRAGPlanner:
                 key=self._unit_sort_key,
             )
 
-            if (
-                family_name
-                == "review_and_special_content"
-            ):
-                # Review is intentionally a protected buffer.
-                # It is not semantically safe to split by guessing.
-                result[
-                    family_name
-                ] = units
-
-                continue
-
             # --------------------------------------------------------
             # Coherent family under soft limit:
             # KEEP TOGETHER.
@@ -1029,6 +1212,7 @@ class KnowledgeRAGPlanner:
             if len(units) <= (
                 self.SOFT_LARGE_THRESHOLD
             ):
+
                 result[
                     family_name
                 ] = units
@@ -1039,7 +1223,9 @@ class KnowledgeRAGPlanner:
             # Group by actual taxonomy category.
             # --------------------------------------------------------
 
-            category_groups = defaultdict(list)
+            category_groups = defaultdict(
+                list
+            )
 
             for unit in units:
 
@@ -1060,16 +1246,16 @@ class KnowledgeRAGPlanner:
                 )
 
             # --------------------------------------------------------
-            # If multiple coherent categories exist,
-            # split at category boundaries.
+            # Multiple coherent categories.
             # --------------------------------------------------------
 
             if len(category_groups) > 1:
 
-                for category, category_units in (
-                    sorted(
-                        category_groups.items()
-                    )
+                for (
+                    category,
+                    category_units,
+                ) in sorted(
+                    category_groups.items()
                 ):
 
                     category_units.sort(
@@ -1081,8 +1267,9 @@ class KnowledgeRAGPlanner:
                         f"__{category}"
                     )
 
-                    # A category itself can still be very large.
-                    if len(category_units) > (
+                    if len(
+                        category_units
+                    ) > (
                         self.HARD_LARGE_THRESHOLD
                     ):
 
@@ -1093,6 +1280,7 @@ class KnowledgeRAGPlanner:
                         )
 
                         if len(chunks) == 1:
+
                             chunks = (
                                 self._chunk_units(
                                     category_units,
@@ -1128,16 +1316,13 @@ class KnowledgeRAGPlanner:
 
             # --------------------------------------------------------
             # One homogeneous category.
-            #
-            # Don't split at 300.
-            #
-            # Split only once it becomes genuinely huge (>500).
-            # Prefer source-document boundaries.
+            # Split only if genuinely huge.
             # --------------------------------------------------------
 
             if len(units) <= (
                 self.HARD_LARGE_THRESHOLD
             ):
+
                 result[
                     family_name
                 ] = units
@@ -1151,6 +1336,7 @@ class KnowledgeRAGPlanner:
             )
 
             if len(chunks) == 1:
+
                 chunks = (
                     self._chunk_units(
                         units,
@@ -1185,9 +1371,13 @@ class KnowledgeRAGPlanner:
     def _split_by_source_document(
         self,
         units: list[dict],
-    ) -> list[list[dict]]:
+    ) -> list[
+        list[dict]
+    ]:
 
-        source_groups = defaultdict(list)
+        source_groups = defaultdict(
+            list
+        )
 
         for unit in units:
 
@@ -1200,7 +1390,10 @@ class KnowledgeRAGPlanner:
                 unit
             )
 
-        if len(source_groups) <= 1:
+        if len(
+            source_groups
+        ) <= 1:
+
             return [units]
 
         ordered = sorted(
@@ -1229,6 +1422,7 @@ class KnowledgeRAGPlanner:
                 and current_count + size
                 > self.HARD_LARGE_THRESHOLD
             ):
+
                 chunks.append(
                     current
                 )
@@ -1243,6 +1437,7 @@ class KnowledgeRAGPlanner:
             current_count += size
 
         if current:
+
             chunks.append(
                 current
             )
@@ -1255,7 +1450,10 @@ class KnowledgeRAGPlanner:
 
     def _build_documents(
         self,
-        groups: dict[str, list[dict]],
+        groups: dict[
+            str,
+            list[dict]
+        ],
     ) -> list[dict]:
 
         documents = []
@@ -1288,15 +1486,6 @@ class KnowledgeRAGPlanner:
                     "title"
                 ]
 
-            elif (
-                family_key
-                == "review_and_special_content"
-            ):
-
-                title = (
-                    "Review and Special Content"
-                )
-
             else:
 
                 title = (
@@ -1326,12 +1515,32 @@ class KnowledgeRAGPlanner:
 
             source_documents = sorted(
                 {
-                    unit[
-                        "source_document"
-                    ]
+                    unit.get(
+                        "source_document",
+                        "",
+                    )
                     for unit in units
                 }
             )
+
+            tier_counts = Counter()
+
+            for unit in units:
+
+                rag = unit.get(
+                    "rag",
+                    {},
+                )
+
+                tier = rag.get(
+                    "tier"
+                )
+
+                if tier:
+
+                    tier_counts[
+                        str(tier)
+                    ] += 1
 
             documents.append(
                 {
@@ -1355,6 +1564,12 @@ class KnowledgeRAGPlanner:
                         source_documents
                     ),
 
+                    "tier_counts": dict(
+                        sorted(
+                            tier_counts.items()
+                        )
+                    ),
+
                     "unit_count": len(
                         units
                     ),
@@ -1364,6 +1579,162 @@ class KnowledgeRAGPlanner:
             )
 
         return documents
+
+    # ================================================================
+    # REVIEW REPORT
+    # ================================================================
+
+    def _build_review_report(
+        self,
+        *,
+        domain: str,
+        all_units: list[dict],
+        excluded_units: list[dict],
+        review_units: list[dict],
+        aggregate_units: list[dict],
+        rag_tier_counts: Counter,
+        rag_status_counts: Counter,
+    ) -> dict:
+
+        def compact_unit(
+            unit: dict,
+        ) -> dict:
+
+            rag = unit.get(
+                "rag",
+                {},
+            )
+
+            return {
+                "unit_id": unit.get(
+                    "unit_id"
+                ),
+
+                "heading": unit.get(
+                    "heading"
+                ),
+
+                "source_document": unit.get(
+                    "source_document_name",
+                    unit.get(
+                        "source_document"
+                    ),
+                ),
+
+                "source_url": unit.get(
+                    "source_url"
+                ),
+
+                "taxonomy_domain": unit.get(
+                    "taxonomy_domain"
+                ),
+
+                "taxonomy_category": unit.get(
+                    "taxonomy_category"
+                ),
+
+                "taxonomy_subcategory": unit.get(
+                    "taxonomy_subcategory"
+                ),
+
+                "rag_tier": rag.get(
+                    "tier"
+                ),
+
+                "rag_status": rag.get(
+                    "status"
+                ),
+
+                "rag_reason": rag.get(
+                    "reason"
+                ),
+
+                "text_preview": (
+                    str(
+                        unit.get(
+                            "text",
+                            "",
+                        )
+                    ).strip()[:500]
+                ),
+            }
+
+        return {
+            "phase": "8.4",
+            "domain": domain,
+
+            "input_units": len(
+                all_units
+            ),
+
+            "excluded_units": len(
+                excluded_units
+            ),
+
+            "review_units": len(
+                review_units
+            ),
+
+            "aggregate_only_units": len(
+                aggregate_units
+            ),
+
+            "rag_tier_counts": dict(
+                sorted(
+                    rag_tier_counts.items()
+                )
+            ),
+
+            "rag_status_counts": dict(
+                sorted(
+                    rag_status_counts.items()
+                )
+            ),
+
+            "review": [
+                compact_unit(
+                    unit
+                )
+                for unit in review_units
+            ],
+
+            "aggregate_only": [
+                compact_unit(
+                    unit
+                )
+                for unit in aggregate_units
+            ],
+
+            "excluded_summary": [
+                compact_unit(
+                    unit
+                )
+                for unit in excluded_units
+            ],
+        }
+
+    # ================================================================
+    # TAXONOMY COUNTS
+    # ================================================================
+
+    def _taxonomy_counts(
+        self,
+        units: list[dict],
+    ) -> Counter:
+
+        counts = Counter()
+
+        for unit in units:
+
+            key = self._taxonomy_key(
+                unit
+            )
+
+            counts[
+                key
+            ] += 1
+
+        return counts
 
     # ================================================================
     # TAXONOMY KEY
@@ -1417,29 +1788,35 @@ class KnowledgeRAGPlanner:
     ) -> tuple:
 
         try:
+
             page_index = int(
                 unit.get(
                     "page_index",
                     0,
                 )
             )
+
         except (
             TypeError,
             ValueError,
         ):
+
             page_index = 0
 
         try:
+
             section_index = int(
                 unit.get(
                     "section_index",
                     0,
                 )
             )
+
         except (
             TypeError,
             ValueError,
         ):
+
             section_index = 0
 
         return (
@@ -1502,7 +1879,11 @@ class KnowledgeRAGPlanner:
             value,
         )
 
-        return value.strip().title()
+        return (
+            value
+            .strip()
+            .title()
+        )
 
     # ================================================================
     # UNIT CHUNKING
@@ -1512,7 +1893,9 @@ class KnowledgeRAGPlanner:
         self,
         units: list[dict],
         limit: int,
-    ) -> list[list[dict]]:
+    ) -> list[
+        list[dict]
+    ]:
 
         units = sorted(
             units,
@@ -1542,14 +1925,20 @@ class KnowledgeRAGPlanner:
     ) -> None:
 
         input_ids = [
-            unit["unit_id"]
+            unit[
+                "unit_id"
+            ]
             for unit in input_units
         ]
 
         planned_ids = [
-            unit["unit_id"]
+            unit[
+                "unit_id"
+            ]
             for document in documents
-            for unit in document["units"]
+            for unit in document[
+                "units"
+            ]
         ]
 
         duplicates_input = (
@@ -1565,15 +1954,17 @@ class KnowledgeRAGPlanner:
         )
 
         if duplicates_input:
+
             raise ValueError(
-                "Duplicate input unit IDs: "
-                f"{duplicates_input}"
+                "Duplicate eligible input "
+                f"unit IDs: {duplicates_input}"
             )
 
         if duplicates_planned:
+
             raise ValueError(
-                "Duplicate planned unit IDs: "
-                f"{duplicates_planned}"
+                "Duplicate planned "
+                f"unit IDs: {duplicates_planned}"
             )
 
         missing = sorted(
@@ -1587,23 +1978,83 @@ class KnowledgeRAGPlanner:
         )
 
         if missing:
+
             raise ValueError(
-                "Knowledge units were lost: "
+                "Eligible knowledge units "
+                "were lost: "
                 f"{missing}"
             )
 
         if extra:
+
             raise ValueError(
                 "Unknown units were added: "
                 f"{extra}"
             )
 
-        if len(input_ids) != len(
+        if len(
+            input_ids
+        ) != len(
             planned_ids
         ):
+
             raise ValueError(
-                "Coverage mismatch."
+                "Eligible-unit coverage mismatch."
             )
+
+    # ================================================================
+    # UNIQUE IDS
+    # ================================================================
+
+    def _validate_unique_ids(
+        self,
+        units: list[dict],
+        *,
+        label: str,
+    ) -> None:
+
+        ids = [
+            unit.get(
+                "unit_id"
+            )
+            for unit in units
+        ]
+
+        duplicates = (
+            self._duplicates(
+                ids
+            )
+        )
+
+        if duplicates:
+
+            raise ValueError(
+                f"Duplicate {label} IDs: "
+                f"{duplicates}"
+            )
+
+    # ================================================================
+    # JSON
+    # ================================================================
+
+    def _load_json(
+        self,
+        path: Path,
+    ) -> dict:
+
+        try:
+
+            return json.loads(
+                path.read_text(
+                    encoding="utf-8"
+                )
+            )
+
+        except json.JSONDecodeError as error:
+
+            raise ValueError(
+                f"Invalid JSON: {path}"
+            ) from error
 
     # ================================================================
     # DUPLICATES
@@ -1611,7 +2062,7 @@ class KnowledgeRAGPlanner:
 
     def _duplicates(
         self,
-        values: list[str],
+        values: list[str | None],
     ) -> list[str]:
 
         seen = set()
@@ -1619,7 +2070,11 @@ class KnowledgeRAGPlanner:
 
         for value in values:
 
+            if value is None:
+                continue
+
             if value in seen:
+
                 duplicates.add(
                     value
                 )

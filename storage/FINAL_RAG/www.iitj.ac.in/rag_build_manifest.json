@@ -1,0 +1,361 @@
+{
+  "phase": "8.5",
+  "domain": "www.iitj.ac.in",
+  "input_plan": "storage/final_organized_knowledge/www.iitj.ac.in/rag_plan.json",
+  "output_root": "storage/FINAL_RAG/www.iitj.ac.in",
+  "documents_planned": 34,
+  "documents_built": 34,
+  "input_units": 1247,
+  "output_units": 1247,
+  "coverage": {
+    "input_units": 1247,
+    "output_units": 1247,
+    "missing_units": 0,
+    "extra_units": 0,
+    "duplicate_input_units": 0,
+    "duplicate_output_units": 0,
+    "coverage_complete": true
+  },
+  "documents": [
+    {
+      "document_id": "academic_calendar_and_timetables",
+      "filename": "academic_calendar_and_timetables.docx",
+      "path": "storage/FINAL_RAG/www.iitj.ac.in/academic_calendar_and_timetables.docx",
+      "manifest_path": "storage/FINAL_RAG/www.iitj.ac.in/academic_calendar_and_timetables.manifest.json",
+      "title": "Academic Calendar And Timetables",
+      "unit_count": 17,
+      "source_documents": 1,
+      "source_urls": 1
+    },
+    {
+      "document_id": "academic_delivery",
+      "filename": "academic_delivery.docx",
+      "path": "storage/FINAL_RAG/www.iitj.ac.in/academic_delivery.docx",
+      "manifest_path": "storage/FINAL_RAG/www.iitj.ac.in/academic_delivery.manifest.json",
+      "title": "Courses, Registration, Calendar and Evaluation",
+      "unit_count": 19,
+      "source_documents": 13,
+      "source_urls": 13
+    },
+    {
+      "document_id": "academic_programs__academic_rules_and_regulations",
+      "filename": "academic_programs__academic_rules_and_regulations.docx",
+      "path": "storage/FINAL_RAG/www.iitj.ac.in/academic_programs__academic_rules_and_regulations.docx",
+      "manifest_path": "storage/FINAL_RAG/www.iitj.ac.in/academic_programs__academic_rules_and_regulations.manifest.json",
+      "title": "Academic Programs",
+      "unit_count": 18,
+      "source_documents": 6,
+      "source_urls": 6
+    },
+    {
+      "document_id": "academic_programs__admission_overview",
+      "filename": "academic_programs__admission_overview.docx",
+      "path": "storage/FINAL_RAG/www.iitj.ac.in/academic_programs__admission_overview.docx",
+      "manifest_path": "storage/FINAL_RAG/www.iitj.ac.in/academic_programs__admission_overview.manifest.json",
+      "title": "Academic Programs",
+      "unit_count": 8,
+      "source_documents": 6,
+      "source_urls": 6
+    },
+    {
+      "document_id": "academic_programs__ambiguous",
+      "filename": "academic_programs__ambiguous.docx",
+      "path": "storage/FINAL_RAG/www.iitj.ac.in/academic_programs__ambiguous.docx",
+      "manifest_path": "storage/FINAL_RAG/www.iitj.ac.in/academic_programs__ambiguous.manifest.json",
+      "title": "Academic Programs",
+      "unit_count": 21,
+      "source_documents": 5,
+      "source_urls": 5
+    },
+    {
+      "document_id": "academic_programs__centres_and_centers",
+      "filename": "academic_programs__centres_and_centers.docx",
+      "path": "storage/FINAL_RAG/www.iitj.ac.in/academic_programs__centres_and_centers.docx",
+      "manifest_path": "storage/FINAL_RAG/www.iitj.ac.in/academic_programs__centres_and_centers.manifest.json",
+      "title": "Academic Programs",
+      "unit_count": 3,
+      "source_documents": 2,
+      "source_urls": 2
+    },
+    {
+      "document_id": "academic_programs__courses_and_curriculum",
+      "filename": "academic_programs__courses_and_curriculum.docx",
+      "path": "storage/FINAL_RAG/www.iitj.ac.in/academic_programs__courses_and_curriculum.docx",
+      "manifest_path": "storage/FINAL_RAG/www.iitj.ac.in/academic_programs__courses_and_curriculum.manifest.json",
+      "title": "Academic Programs",
+      "unit_count": 16,
+      "source_documents": 11,
+      "source_urls": 11
+    },
+    {
+      "document_id": "academic_programs__departments_and_schools",
+      "filename": "academic_programs__departments_and_schools.docx",
+      "path": "storage/FINAL_RAG/www.iitj.ac.in/academic_programs__departments_and_schools.docx",
+      "manifest_path": "storage/FINAL_RAG/www.iitj.ac.in/academic_programs__departments_and_schools.manifest.json",
+      "title": "Academic Programs",
+      "unit_count": 82,
+      "source_documents": 5,
+      "source_urls": 5
+    },
+    {
+      "document_id": "academic_programs__eligibility",
+      "filename": "academic_programs__eligibility.docx",
+      "path": "storage/FINAL_RAG/www.iitj.ac.in/academic_programs__eligibility.docx",
+      "manifest_path": "storage/FINAL_RAG/www.iitj.ac.in/academic_programs__eligibility.manifest.json",
+      "title": "Academic Programs",
+      "unit_count": 6,
+      "source_documents": 3,
+      "source_urls": 3
+    },
+    {
+      "document_id": "academic_programs__environment_and_sustainability",
+      "filename": "academic_programs__environment_and_sustainability.docx",
+      "path": "storage/FINAL_RAG/www.iitj.ac.in/academic_programs__environment_and_sustainability.docx",
+      "manifest_path": "storage/FINAL_RAG/www.iitj.ac.in/academic_programs__environment_and_sustainability.manifest.json",
+      "title": "Academic Programs",
+      "unit_count": 1,
+      "source_documents": 1,
+      "source_urls": 1
+    },
+    {
+      "document_id": "academic_programs__laboratories",
+      "filename": "academic_programs__laboratories.docx",
+      "path": "storage/FINAL_RAG/www.iitj.ac.in/academic_programs__laboratories.docx",
+      "manifest_path": "storage/FINAL_RAG/www.iitj.ac.in/academic_programs__laboratories.manifest.json",
+      "title": "Academic Programs",
+      "unit_count": 1,
+      "source_documents": 1,
+      "source_urls": 1
+    },
+    {
+      "document_id": "academic_programs__leadership",
+      "filename": "academic_programs__leadership.docx",
+      "path": "storage/FINAL_RAG/www.iitj.ac.in/academic_programs__leadership.docx",
+      "manifest_path": "storage/FINAL_RAG/www.iitj.ac.in/academic_programs__leadership.manifest.json",
+      "title": "Academic Programs",
+      "unit_count": 1,
+      "source_documents": 1,
+      "source_urls": 1
+    },
+    {
+      "document_id": "academic_programs__medical_services",
+      "filename": "academic_programs__medical_services.docx",
+      "path": "storage/FINAL_RAG/www.iitj.ac.in/academic_programs__medical_services.docx",
+      "manifest_path": "storage/FINAL_RAG/www.iitj.ac.in/academic_programs__medical_services.manifest.json",
+      "title": "Academic Programs",
+      "unit_count": 2,
+      "source_documents": 2,
+      "source_urls": 2
+    },
+    {
+      "document_id": "academic_programs__placements",
+      "filename": "academic_programs__placements.docx",
+      "path": "storage/FINAL_RAG/www.iitj.ac.in/academic_programs__placements.docx",
+      "manifest_path": "storage/FINAL_RAG/www.iitj.ac.in/academic_programs__placements.manifest.json",
+      "title": "Academic Programs",
+      "unit_count": 2,
+      "source_documents": 2,
+      "source_urls": 2
+    },
+    {
+      "document_id": "academic_programs__programs",
+      "filename": "academic_programs__programs.docx",
+      "path": "storage/FINAL_RAG/www.iitj.ac.in/academic_programs__programs.docx",
+      "manifest_path": "storage/FINAL_RAG/www.iitj.ac.in/academic_programs__programs.manifest.json",
+      "title": "Academic Programs",
+      "unit_count": 142,
+      "source_documents": 53,
+      "source_urls": 53
+    },
+    {
+      "document_id": "academic_programs__seminars_and_workshops",
+      "filename": "academic_programs__seminars_and_workshops.docx",
+      "path": "storage/FINAL_RAG/www.iitj.ac.in/academic_programs__seminars_and_workshops.docx",
+      "manifest_path": "storage/FINAL_RAG/www.iitj.ac.in/academic_programs__seminars_and_workshops.manifest.json",
+      "title": "Academic Programs",
+      "unit_count": 1,
+      "source_documents": 1,
+      "source_urls": 1
+    },
+    {
+      "document_id": "academic_programs__special_units",
+      "filename": "academic_programs__special_units.docx",
+      "path": "storage/FINAL_RAG/www.iitj.ac.in/academic_programs__special_units.docx",
+      "manifest_path": "storage/FINAL_RAG/www.iitj.ac.in/academic_programs__special_units.manifest.json",
+      "title": "Academic Programs",
+      "unit_count": 1,
+      "source_documents": 1,
+      "source_urls": 1
+    },
+    {
+      "document_id": "academic_programs__training",
+      "filename": "academic_programs__training.docx",
+      "path": "storage/FINAL_RAG/www.iitj.ac.in/academic_programs__training.docx",
+      "manifest_path": "storage/FINAL_RAG/www.iitj.ac.in/academic_programs__training.manifest.json",
+      "title": "Academic Programs",
+      "unit_count": 1,
+      "source_documents": 1,
+      "source_urls": 1
+    },
+    {
+      "document_id": "academic_programs__uncategorized",
+      "filename": "academic_programs__uncategorized.docx",
+      "path": "storage/FINAL_RAG/www.iitj.ac.in/academic_programs__uncategorized.docx",
+      "manifest_path": "storage/FINAL_RAG/www.iitj.ac.in/academic_programs__uncategorized.manifest.json",
+      "title": "Academic Programs",
+      "unit_count": 3,
+      "source_documents": 2,
+      "source_urls": 2
+    },
+    {
+      "document_id": "academic_rules_and_regulations",
+      "filename": "academic_rules_and_regulations.docx",
+      "path": "storage/FINAL_RAG/www.iitj.ac.in/academic_rules_and_regulations.docx",
+      "manifest_path": "storage/FINAL_RAG/www.iitj.ac.in/academic_rules_and_regulations.manifest.json",
+      "title": "Academic Rules and Regulations",
+      "unit_count": 156,
+      "source_documents": 46,
+      "source_urls": 46
+    },
+    {
+      "document_id": "campus_and_infrastructure",
+      "filename": "campus_and_infrastructure.docx",
+      "path": "storage/FINAL_RAG/www.iitj.ac.in/campus_and_infrastructure.docx",
+      "manifest_path": "storage/FINAL_RAG/www.iitj.ac.in/campus_and_infrastructure.manifest.json",
+      "title": "Campus and Infrastructure",
+      "unit_count": 83,
+      "source_documents": 57,
+      "source_urls": 57
+    },
+    {
+      "document_id": "careers_and_placements",
+      "filename": "careers_and_placements.docx",
+      "path": "storage/FINAL_RAG/www.iitj.ac.in/careers_and_placements.docx",
+      "manifest_path": "storage/FINAL_RAG/www.iitj.ac.in/careers_and_placements.manifest.json",
+      "title": "Careers, Placements and Internships",
+      "unit_count": 40,
+      "source_documents": 11,
+      "source_urls": 11
+    },
+    {
+      "document_id": "departments_and_schools",
+      "filename": "departments_and_schools.docx",
+      "path": "storage/FINAL_RAG/www.iitj.ac.in/departments_and_schools.docx",
+      "manifest_path": "storage/FINAL_RAG/www.iitj.ac.in/departments_and_schools.manifest.json",
+      "title": "Departments and Schools",
+      "unit_count": 195,
+      "source_documents": 66,
+      "source_urls": 66
+    },
+    {
+      "document_id": "events_and_notices",
+      "filename": "events_and_notices.docx",
+      "path": "storage/FINAL_RAG/www.iitj.ac.in/events_and_notices.docx",
+      "manifest_path": "storage/FINAL_RAG/www.iitj.ac.in/events_and_notices.manifest.json",
+      "title": "Events and Notices",
+      "unit_count": 26,
+      "source_documents": 17,
+      "source_urls": 17
+    },
+    {
+      "document_id": "health_safety_and_wellbeing",
+      "filename": "health_safety_and_wellbeing.docx",
+      "path": "storage/FINAL_RAG/www.iitj.ac.in/health_safety_and_wellbeing.docx",
+      "manifest_path": "storage/FINAL_RAG/www.iitj.ac.in/health_safety_and_wellbeing.manifest.json",
+      "title": "Health, Safety and Wellbeing",
+      "unit_count": 23,
+      "source_documents": 13,
+      "source_urls": 13
+    },
+    {
+      "document_id": "institute_centres_and_units",
+      "filename": "institute_centres_and_units.docx",
+      "path": "storage/FINAL_RAG/www.iitj.ac.in/institute_centres_and_units.docx",
+      "manifest_path": "storage/FINAL_RAG/www.iitj.ac.in/institute_centres_and_units.manifest.json",
+      "title": "Institutes, Centres and Units",
+      "unit_count": 121,
+      "source_documents": 79,
+      "source_urls": 79
+    },
+    {
+      "document_id": "laboratories_and_workshops",
+      "filename": "laboratories_and_workshops.docx",
+      "path": "storage/FINAL_RAG/www.iitj.ac.in/laboratories_and_workshops.docx",
+      "manifest_path": "storage/FINAL_RAG/www.iitj.ac.in/laboratories_and_workshops.manifest.json",
+      "title": "Laboratories and Workshops",
+      "unit_count": 19,
+      "source_documents": 14,
+      "source_urls": 14
+    },
+    {
+      "document_id": "people_and_leadership",
+      "filename": "people_and_leadership.docx",
+      "path": "storage/FINAL_RAG/www.iitj.ac.in/people_and_leadership.docx",
+      "manifest_path": "storage/FINAL_RAG/www.iitj.ac.in/people_and_leadership.manifest.json",
+      "title": "People and Leadership",
+      "unit_count": 40,
+      "source_documents": 31,
+      "source_urls": 31
+    },
+    {
+      "document_id": "research_areas_and_groups",
+      "filename": "research_areas_and_groups.docx",
+      "path": "storage/FINAL_RAG/www.iitj.ac.in/research_areas_and_groups.docx",
+      "manifest_path": "storage/FINAL_RAG/www.iitj.ac.in/research_areas_and_groups.manifest.json",
+      "title": "Research Areas and Groups",
+      "unit_count": 25,
+      "source_documents": 11,
+      "source_urls": 11
+    },
+    {
+      "document_id": "research_centres_and_labs",
+      "filename": "research_centres_and_labs.docx",
+      "path": "storage/FINAL_RAG/www.iitj.ac.in/research_centres_and_labs.docx",
+      "manifest_path": "storage/FINAL_RAG/www.iitj.ac.in/research_centres_and_labs.manifest.json",
+      "title": "Research Centres and Laboratories",
+      "unit_count": 10,
+      "source_documents": 7,
+      "source_urls": 7
+    },
+    {
+      "document_id": "research_outputs_and_innovation",
+      "filename": "research_outputs_and_innovation.docx",
+      "path": "storage/FINAL_RAG/www.iitj.ac.in/research_outputs_and_innovation.docx",
+      "manifest_path": "storage/FINAL_RAG/www.iitj.ac.in/research_outputs_and_innovation.manifest.json",
+      "title": "Research Outputs and Innovation",
+      "unit_count": 13,
+      "source_documents": 8,
+      "source_urls": 8
+    },
+    {
+      "document_id": "research_projects",
+      "filename": "research_projects.docx",
+      "path": "storage/FINAL_RAG/www.iitj.ac.in/research_projects.docx",
+      "manifest_path": "storage/FINAL_RAG/www.iitj.ac.in/research_projects.manifest.json",
+      "title": "Research Projects",
+      "unit_count": 32,
+      "source_documents": 26,
+      "source_urls": 26
+    },
+    {
+      "document_id": "review_and_special_content",
+      "filename": "review_and_special_content.docx",
+      "path": "storage/FINAL_RAG/www.iitj.ac.in/review_and_special_content.docx",
+      "manifest_path": "storage/FINAL_RAG/www.iitj.ac.in/review_and_special_content.manifest.json",
+      "title": "Review and Special Content",
+      "unit_count": 100,
+      "source_documents": 35,
+      "source_urls": 35
+    },
+    {
+      "document_id": "student_residential_life",
+      "filename": "student_residential_life.docx",
+      "path": "storage/FINAL_RAG/www.iitj.ac.in/student_residential_life.docx",
+      "manifest_path": "storage/FINAL_RAG/www.iitj.ac.in/student_residential_life.manifest.json",
+      "title": "Student Residential Life",
+      "unit_count": 19,
+      "source_documents": 12,
+      "source_urls": 12
+    }
+  ]
+}

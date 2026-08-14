@@ -1,0 +1,51 @@
+{
+  "phase": "8.5",
+  "document_id": "research_outputs_and_innovation",
+  "filename": "research_outputs_and_innovation.docx",
+  "title": "Research Outputs and Innovation",
+  "domain": "www.iitj.ac.in",
+  "unit_count": 13,
+  "unit_ids": [
+    "5da15c5d3503f860",
+    "5e7d0c57d9405e16",
+    "5cec5efe25188a02",
+    "1ab783363ecf8687",
+    "1e2f011306282c30",
+    "a5feaadb1467440b",
+    "994a7c45441847d8",
+    "b351d5af0c92b711",
+    "d099e0aa063e29d7",
+    "7be4f79e305f25f0",
+    "b252ea8b59c5e35c",
+    "d4c3ba3cfa8ed03a",
+    "89838468e6b78f43"
+  ],
+  "source_documents": [
+    "storage/structured_knowledge/www.iitj.ac.in/others/ai_ds_ecosystem.json",
+    "storage/structured_knowledge/www.iitj.ac.in/others/happening_now.json",
+    "storage/structured_knowledge/www.iitj.ac.in/others/office_of_corporate_relations.json",
+    "storage/structured_knowledge/www.iitj.ac.in/others/our_programs.json",
+    "storage/structured_knowledge/www.iitj.ac.in/others/publications__409d3001.json",
+    "storage/structured_knowledge/www.iitj.ac.in/others/technology_innovation_and_start_up_center_iitj_tisc.json",
+    "storage/structured_knowledge/www.iitj.ac.in/others/technology_innovation_and_start_up_center_iitj_tisc__1169381d.json",
+    "storage/structured_knowledge/www.iitj.ac.in/others/themes_of_uba.json"
+  ],
+  "source_urls": [
+    "https://www.iitj.ac.in/Unnat-Bharat-Abhiyan/en/Themes-Of-UBA",
+    "https://www.iitj.ac.in/office-of-corporate-relations/en/happening-now",
+    "https://www.iitj.ac.in/office-of-corporate-relations/en/office-of-corporate-relations",
+    "https://www.iitj.ac.in/school-of-artificial-intelligence-data-science/en/ai-and-ds-ecosystem",
+    "https://www.iitj.ac.in/school-of-artificial-intelligence-data-science/en/publications",
+    "https://www.iitj.ac.in/tisc",
+    "https://www.iitj.ac.in/tisc/en/programs",
+    "https://www.iitj.ac.in/tisc/en/tisc"
+  ],
+  "taxonomy_categories": [
+    "people/faculty/faculty",
+    "research/patents_and_innovation/patents_and_innovation",
+    "research/publications/publications"
+  ],
+  "coverage": {
+    "unit_count_matches_plan": true
+  }
+}

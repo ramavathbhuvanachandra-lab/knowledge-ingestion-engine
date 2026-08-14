@@ -1,0 +1,27 @@
+{
+  "phase": "8.5",
+  "document_id": "academic_programs__uncategorized",
+  "filename": "academic_programs__uncategorized.docx",
+  "title": "Academic Programs",
+  "domain": "www.iitj.ac.in",
+  "unit_count": 3,
+  "unit_ids": [
+    "45eb0eeabd4bf13b",
+    "49fbb2fe2c2b0d63",
+    "0c3b76dd262f3490"
+  ],
+  "source_documents": [
+    "storage/structured_knowledge/www.iitj.ac.in/others/list_of_academic_programs.json",
+    "storage/structured_knowledge/www.iitj.ac.in/others/undergraduate_programs__e705f20d.json"
+  ],
+  "source_urls": [
+    "https://www.iitj.ac.in/mathematics/en/undergraduate-programs",
+    "https://www.iitj.ac.in/office-of-academics/en/list-of-academic-programs"
+  ],
+  "taxonomy_categories": [
+    "review/uncategorized/unclassified"
+  ],
+  "coverage": {
+    "unit_count_matches_plan": true
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "phase": "8.5",
+  "document_id": "academic_programs__admission_overview",
+  "filename": "academic_programs__admission_overview.docx",
+  "title": "Academic Programs",
+  "domain": "www.iitj.ac.in",
+  "unit_count": 8,
+  "unit_ids": [
+    "2faf9b293dc661c1",
+    "425d63f3b30149c7",
+    "71d43a4ed5dc3da2",
+    "a229b2e178af88be",
+    "4ae7f16e1bbf8658",
+    "60e887639ba4624f",
+    "22bded7c82ea6498",
+    "e93b42ac8e07ad8e"
+  ],
+  "source_documents": [
+    "storage/structured_knowledge/www.iitj.ac.in/others/admissions__3e7131fa.json",
+    "storage/structured_knowledge/www.iitj.ac.in/others/admissions__86cd4058.json",
+    "storage/structured_knowledge/www.iitj.ac.in/others/eligibility_criteria_and_selection_process.json",
+    "storage/structured_knowledge/www.iitj.ac.in/others/faqs.json",
+    "storage/structured_knowledge/www.iitj.ac.in/others/ph_d.json",
+    "storage/structured_knowledge/www.iitj.ac.in/others/upcoming_programmes.json"
+  ],
+  "source_urls": [
+    "https://www.iitj.ac.in/dh/en/admissions",
+    "https://www.iitj.ac.in/itep/en/admissions",
+    "https://www.iitj.ac.in/office-of-academics/en/ph.d.",
+    "https://www.iitj.ac.in/school-of-artificial-intelligence-data-science/en/faqs",
+    "https://www.iitj.ac.in/schools/en/eligibility-criteria-and-selection-process",
+    "https://www.iitj.ac.in/vtu/en/upcoming-programmes"
+  ],
+  "taxonomy_categories": [
+    "admissions/admission_overview/admission_overview"
+  ],
+  "coverage": {
+    "unit_count_matches_plan": true
+  }
+}

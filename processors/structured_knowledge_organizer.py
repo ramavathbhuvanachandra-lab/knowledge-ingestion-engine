@@ -67,6 +67,9 @@ from processors.knowledge_context_rules import (
 )
 
 
+from processors.knowledge_content_triage import KnowledgeContentTriage
+
+
 class StructuredKnowledgeOrganizer:
 
     # ==================================================================
@@ -141,6 +144,9 @@ class StructuredKnowledgeOrganizer:
     # ==================================================================
     # ONE DOCUMENT
     # ==================================================================
+
+        self.rag_triage = KnowledgeContentTriage()
+
 
     def organize_document(
         self,
@@ -341,6 +347,38 @@ class StructuredKnowledgeOrganizer:
                     )
                 )
 
+                # ------------------------------------------------------
+                # STUDENT RAG ELIGIBILITY
+                #
+                # This does NOT delete or modify source knowledge.
+                # It only determines whether the unit belongs in the
+                # final student-support RAG candidate.
+                # ------------------------------------------------------
+
+                rag_classification = (
+                    self.rag_triage.classify(
+                        {
+                            "heading": heading,
+                            "text": text,
+                            "section_path": section_path,
+                            "document_title": title,
+                            "source_document_name": (
+                                json_path.name
+                            ),
+                            "source_url": url,
+                            "original_category": (
+                                original_category
+                            ),
+                            "topic": (
+                                classification["domain"]
+                            ),
+                            "subtopic": (
+                                classification["category"]
+                            ),
+                        }
+                    )
+                )
+
                 unit = {
                     # --------------------------------------------------
                     # IDENTITY
@@ -447,6 +485,16 @@ class StructuredKnowledgeOrganizer:
                     "classification_score": (
                         classification[
                             "score"
+                        ]
+                    ),
+
+                    # --------------------------------------------------
+                    # STUDENT RAG ELIGIBILITY
+                    # --------------------------------------------------
+
+                    "rag": (
+                        rag_classification[
+                            "rag"
                         ]
                     ),
                 }
@@ -664,6 +712,10 @@ class StructuredKnowledgeOrganizer:
         confidence_counts = Counter()
         decision_counts = Counter()
 
+        rag_tier_counts = Counter()
+
+        rag_status_counts = Counter()
+
         for unit in all_units:
 
             category_key = "/".join(
@@ -701,6 +753,29 @@ class StructuredKnowledgeOrganizer:
                     "decision"
                 ]
             ] += 1
+
+            rag = unit.get(
+                "rag",
+                {},
+            )
+
+            rag_tier = rag.get(
+                "tier"
+            )
+
+            rag_status = rag.get(
+                "status"
+            )
+
+            if rag_tier:
+                rag_tier_counts[
+                    rag_tier
+                ] += 1
+
+            if rag_status:
+                rag_status_counts[
+                    rag_status
+                ] += 1
 
         review_units = sum(
             1
@@ -782,6 +857,14 @@ class StructuredKnowledgeOrganizer:
 
             "decision_counts": dict(
                 decision_counts
+            ),
+
+            "rag_tier_counts": dict(
+                rag_tier_counts
+            ),
+
+            "rag_status_counts": dict(
+                rag_status_counts
             ),
 
             "document_reports": (
@@ -904,6 +987,14 @@ class StructuredKnowledgeOrganizer:
 
             "decision_counts": dict(
                 decision_counts
+            ),
+
+            "rag_tier_counts": dict(
+                rag_tier_counts
+            ),
+
+            "rag_status_counts": dict(
+                rag_status_counts
             ),
 
             "low_confidence_units": (

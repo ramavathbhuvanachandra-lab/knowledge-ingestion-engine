@@ -1,0 +1,23 @@
+{
+  "phase": "8.5",
+  "document_id": "academic_programs__leadership",
+  "filename": "academic_programs__leadership.docx",
+  "title": "Academic Programs",
+  "domain": "www.iitj.ac.in",
+  "unit_count": 1,
+  "unit_ids": [
+    "f5ebc4411e36728c"
+  ],
+  "source_documents": [
+    "storage/structured_knowledge/www.iitj.ac.in/others/alumni_global_presence.json"
+  ],
+  "source_urls": [
+    "https://www.iitj.ac.in/office-of-international-relations/en/alumni-global-presence"
+  ],
+  "taxonomy_categories": [
+    "people/leadership/leadership"
+  ],
+  "coverage": {
+    "unit_count_matches_plan": true
+  }
+}

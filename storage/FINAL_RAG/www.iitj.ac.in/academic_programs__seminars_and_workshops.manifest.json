@@ -1,0 +1,23 @@
+{
+  "phase": "8.5",
+  "document_id": "academic_programs__seminars_and_workshops",
+  "filename": "academic_programs__seminars_and_workshops.docx",
+  "title": "Academic Programs",
+  "domain": "www.iitj.ac.in",
+  "unit_count": 1,
+  "unit_ids": [
+    "d000d894e91ee965"
+  ],
+  "source_documents": [
+    "storage/structured_knowledge/www.iitj.ac.in/others/vanguard_lectures.json"
+  ],
+  "source_urls": [
+    "https://www.iitj.ac.in/lecture-series/en/vanguard-lectures"
+  ],
+  "taxonomy_categories": [
+    "events_and_activities/seminars_and_workshops/seminars_and_workshops"
+  ],
+  "coverage": {
+    "unit_count_matches_plan": true
+  }
+}

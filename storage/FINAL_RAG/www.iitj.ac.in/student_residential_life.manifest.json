@@ -1,0 +1,68 @@
+{
+  "phase": "8.5",
+  "document_id": "student_residential_life",
+  "filename": "student_residential_life.docx",
+  "title": "Student Residential Life",
+  "domain": "www.iitj.ac.in",
+  "unit_count": 19,
+  "unit_ids": [
+    "abdd4f4a63203ed3",
+    "4d1799fc3db5a189",
+    "6a8eebb4a1a80b65",
+    "d6fb35eccfe07d44",
+    "ca78258e890039e5",
+    "14744ac73e55d34c",
+    "c376f0436656df31",
+    "e40d8f7925c076c0",
+    "d407bd3fa999f654",
+    "218178313da57abe",
+    "06e4302d9a16147b",
+    "b7d75b04efb9780f",
+    "f25147beee156d37",
+    "b5a9845b8d216e32",
+    "58dcb40362663203",
+    "65b038dd14cc4ab6",
+    "97f864c095454c7e",
+    "1c83ec33134aff0e",
+    "bb09646cb0e0e287"
+  ],
+  "source_documents": [
+    "storage/structured_knowledge/www.iitj.ac.in/others/academic_regulations.json",
+    "storage/structured_knowledge/www.iitj.ac.in/others/admissions__3e7131fa.json",
+    "storage/structured_knowledge/www.iitj.ac.in/others/committees.json",
+    "storage/structured_knowledge/www.iitj.ac.in/others/cyber_threat.json",
+    "storage/structured_knowledge/www.iitj.ac.in/others/faqs__094338fc.json",
+    "storage/structured_knowledge/www.iitj.ac.in/others/happening_now.json",
+    "storage/structured_knowledge/www.iitj.ac.in/others/hostel_booking.json",
+    "storage/structured_knowledge/www.iitj.ac.in/others/office_of_students.json",
+    "storage/structured_knowledge/www.iitj.ac.in/others/school_of_liberal_arts.json",
+    "storage/structured_knowledge/www.iitj.ac.in/others/school_of_liberal_arts__aba38996.json",
+    "storage/structured_knowledge/www.iitj.ac.in/others/security.json",
+    "storage/structured_knowledge/www.iitj.ac.in/others/tenders.json"
+  ],
+  "source_urls": [
+    "https://www.iitj.ac.in/Tenders",
+    "https://www.iitj.ac.in/cybersecurity/en/cyberthreat",
+    "https://www.iitj.ac.in/itep/en/admissions",
+    "https://www.iitj.ac.in/master-of-science/en/faqs",
+    "https://www.iitj.ac.in/materials-engineering/en/regulations",
+    "https://www.iitj.ac.in/office-of-corporate-relations/en/happening-now",
+    "https://www.iitj.ac.in/office-of-security-transports/en/security",
+    "https://www.iitj.ac.in/office-of-students/en/committees",
+    "https://www.iitj.ac.in/office-of-students/en/hostel-booking",
+    "https://www.iitj.ac.in/office-of-students/en/office-of-students",
+    "https://www.iitj.ac.in/school-of-liberal-arts",
+    "https://www.iitj.ac.in/school-of-liberal-arts/en/school-of-liberal-arts"
+  ],
+  "taxonomy_categories": [
+    "academics/academic_rules_and_regulations/academic_rules_and_regulations",
+    "contacts_and_directory/general_contacts/general_contacts",
+    "food_and_dining/mess_and_dining/mess_and_dining",
+    "health_safety_and_wellbeing/security/security",
+    "hostels/accommodation/accommodation",
+    "people/leadership/leadership"
+  ],
+  "coverage": {
+    "unit_count_matches_plan": true
+  }
+}

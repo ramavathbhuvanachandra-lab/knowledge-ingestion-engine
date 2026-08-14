@@ -1,0 +1,26 @@
+{
+  "phase": "8.5",
+  "document_id": "academic_programs__placements",
+  "filename": "academic_programs__placements.docx",
+  "title": "Academic Programs",
+  "domain": "www.iitj.ac.in",
+  "unit_count": 2,
+  "unit_ids": [
+    "6b930c1d4e8db6c4",
+    "77be6de24ca9f5bb"
+  ],
+  "source_documents": [
+    "storage/structured_knowledge/www.iitj.ac.in/others/inbound_students.json",
+    "storage/structured_knowledge/www.iitj.ac.in/others/office_of_international_relations.json"
+  ],
+  "source_urls": [
+    "https://www.iitj.ac.in/office-of-international-relations/en/inbound-student",
+    "https://www.iitj.ac.in/office-of-international-relations/en/office-of-international-relations"
+  ],
+  "taxonomy_categories": [
+    "careers_and_placements/placements/placements"
+  ],
+  "coverage": {
+    "unit_count_matches_plan": true
+  }
+}

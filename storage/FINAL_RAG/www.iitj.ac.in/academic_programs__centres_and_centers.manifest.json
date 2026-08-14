@@ -1,0 +1,27 @@
+{
+  "phase": "8.5",
+  "document_id": "academic_programs__centres_and_centers",
+  "filename": "academic_programs__centres_and_centers.docx",
+  "title": "Academic Programs",
+  "domain": "www.iitj.ac.in",
+  "unit_count": 3,
+  "unit_ids": [
+    "a75fdb89656be24e",
+    "4b9559787702ff05",
+    "105fc250571d8c81"
+  ],
+  "source_documents": [
+    "storage/structured_knowledge/www.iitj.ac.in/others/capacity_building__653053b2.json",
+    "storage/structured_knowledge/www.iitj.ac.in/others/workshop_on_next_generation_education_technology.json"
+  ],
+  "source_urls": [
+    "https://www.iitj.ac.in/cdh/en/capacity-building",
+    "https://www.iitj.ac.in/cete/en/workshop-on-next-gen-edtech"
+  ],
+  "taxonomy_categories": [
+    "institutes_centres_and_units/centres_and_centers/centres_and_centers"
+  ],
+  "coverage": {
+    "unit_count_matches_plan": true
+  }
+}

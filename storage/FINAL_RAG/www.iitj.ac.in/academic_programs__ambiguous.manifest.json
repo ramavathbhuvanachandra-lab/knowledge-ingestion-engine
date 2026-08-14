@@ -1,0 +1,52 @@
+{
+  "phase": "8.5",
+  "document_id": "academic_programs__ambiguous",
+  "filename": "academic_programs__ambiguous.docx",
+  "title": "Academic Programs",
+  "domain": "www.iitj.ac.in",
+  "unit_count": 21,
+  "unit_ids": [
+    "a43c5fe345d4f665",
+    "0a6e2795254f9609",
+    "8bb3d62a91eef507",
+    "485bd4152db0cb53",
+    "c7e9aea45f23e949",
+    "5fbc2d309ab9eee3",
+    "f87345ac33183041",
+    "7e4066c3189b3189",
+    "b9f6a8f123811431",
+    "0ff8392ff745e1c9",
+    "52494ae7e9113791",
+    "be97667163c11ec7",
+    "26747ede4c0fb53a",
+    "0518725b323cd293",
+    "2fb1a4e5c24e43a3",
+    "c34c6d720a0bd7e9",
+    "4a53e420b9e7cf5b",
+    "1df59067e5b3086e",
+    "e8cde9d3c4634990",
+    "b232fb8c35351a76",
+    "b5806100acc1b7c6"
+  ],
+  "source_documents": [
+    "storage/structured_knowledge/www.iitj.ac.in/others/about_program.json",
+    "storage/structured_knowledge/www.iitj.ac.in/others/alumni_global_presence.json",
+    "storage/structured_knowledge/www.iitj.ac.in/others/m_s_by_research_program.json",
+    "storage/structured_knowledge/www.iitj.ac.in/others/student_achievements.json",
+    "storage/structured_knowledge/www.iitj.ac.in/others/undergraduate_programs__e705f20d.json"
+  ],
+  "source_urls": [
+    "https://www.iitj.ac.in/centre-of-excellence-on-arts-and-digital-immersion/en/about-program",
+    "https://www.iitj.ac.in/centre-of-excellence-on-arts-and-digital-immersion/en/m.s.-by-research-program",
+    "https://www.iitj.ac.in/computer-science-engineering/en/student-achievements",
+    "https://www.iitj.ac.in/mathematics/en/undergraduate-programs",
+    "https://www.iitj.ac.in/office-of-international-relations/en/alumni-global-presence"
+  ],
+  "taxonomy_categories": [
+    "review/ambiguous/multiple_possible_domains",
+    "review/ambiguous/weak_classification"
+  ],
+  "coverage": {
+    "unit_count_matches_plan": true
+  }
+}

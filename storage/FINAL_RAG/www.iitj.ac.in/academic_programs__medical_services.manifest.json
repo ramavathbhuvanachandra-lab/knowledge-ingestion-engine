@@ -1,0 +1,26 @@
+{
+  "phase": "8.5",
+  "document_id": "academic_programs__medical_services",
+  "filename": "academic_programs__medical_services.docx",
+  "title": "Academic Programs",
+  "domain": "www.iitj.ac.in",
+  "unit_count": 2,
+  "unit_ids": [
+    "5331f253ccbb6f2c",
+    "f0fb51d68a473206"
+  ],
+  "source_documents": [
+    "storage/structured_knowledge/www.iitj.ac.in/others/phd_scholars__ca73e1f6.json",
+    "storage/structured_knowledge/www.iitj.ac.in/others/phd_student.json"
+  ],
+  "source_urls": [
+    "https://www.iitj.ac.in/economics/en/phd-student",
+    "https://www.iitj.ac.in/school-of-liberal-arts/en/phd-scholars"
+  ],
+  "taxonomy_categories": [
+    "health_safety_and_wellbeing/medical_services/medical_services"
+  ],
+  "coverage": {
+    "unit_count_matches_plan": true
+  }
+}
