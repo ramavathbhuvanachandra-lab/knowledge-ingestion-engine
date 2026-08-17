@@ -13,7 +13,7 @@ from crawler.crawl_policy import CrawlPolicy
 from crawler.crawl_queue import CrawlQueue
 from crawler.depth_tracker import DepthTracker
 from crawler.url_classifier import classify_url
-
+from crawler.url_normalizer import normalize_url
 from models.crawl_plan import (
     CrawlAction,
 )
@@ -253,9 +253,9 @@ class CrawlEngine:
         url: str,
     ) -> str:
 
-        return (
+        return normalize_url(
             url or ""
-        ).strip()
+        )
 
     # ========================================================
     # INVENTORY CREATION
