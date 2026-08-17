@@ -1014,8 +1014,8 @@ class CrawlEngine:
 
         self._reset_state()
 
-        normalized_start_url = (
-            start_url.strip()
+        normalized_start_url = normalize_url(
+            start_url
         )
 
         if not normalized_start_url:
@@ -1105,6 +1105,12 @@ class CrawlEngine:
                 depth=0,
             )
         )
+
+        self.depth_tracker.register_root(
+            normalized_start_url
+        )
+            
+        
 
         # ----------------------------------------------------
         # REGISTER ROOT
