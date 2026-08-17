@@ -5,6 +5,7 @@ import re
 from pathlib import Path
 from urllib.parse import urlparse
 
+from crawler.link_extractor import extract_internal_links
 from bs4 import BeautifulSoup
 
 from crawler.crawler import crawl_page
@@ -16,6 +17,7 @@ from crawler.url_classifier import classify_url
 from models.crawl_plan import (
     CrawlAction,
 )
+
 from models.url import (
     URLInfo,
     URLType,
@@ -396,7 +398,7 @@ class CrawlEngine:
             ] = output
 
     # ========================================================
-    # NAVIGATION DISCOVERY
+    # URL DISCOVERY
     # ========================================================
 
     def _discover_navigation(
@@ -405,13 +407,25 @@ class CrawlEngine:
         source_url: str,
     ) -> list[URLInfo]:
         """
-        Run navigation extraction followed by URL discovery.
+        Discover URLs from both:
+
+        1. Structured navigation trees.
+        2. Generic internal <a href> links from the entire page.
+
+        Navigation discovery is retained for hierarchy-aware
+        crawling, while generic HTML discovery prevents valid
+        content links from being missed simply because they are
+        outside recognized navigation containers.
         """
 
         soup = BeautifulSoup(
             html,
             "html.parser",
         )
+
+        # ----------------------------------------------------
+        # 1. Navigation discovery
+        # ----------------------------------------------------
 
         navigation_pipeline = (
             NavigationPipeline(
@@ -429,9 +443,48 @@ class CrawlEngine:
             ]
         )
 
-        return self.discovery.discover(
-            candidates=candidates,
-            source_url=source_url,
+        navigation_urls = (
+            self.discovery.discover(
+                candidates=candidates,
+                source_url=source_url,
+            )
+        )
+
+        # ----------------------------------------------------
+        # 2. Generic HTML link discovery
+        # ----------------------------------------------------
+
+        content_urls = (
+            self.discovery.discover_html_links(
+                html=html,
+                source_url=source_url,
+            )
+        )
+
+        # ----------------------------------------------------
+        # 3. Merge both discovery paths
+        #
+        # Navigation links and generic content links can
+        # overlap. Use normalized URL as the single identity.
+        # ----------------------------------------------------
+
+        merged: dict[str, URLInfo] = {}
+
+        for url_info in navigation_urls:
+
+            merged[
+                url_info.normalized_url
+            ] = url_info
+
+        for url_info in content_urls:
+
+            merged.setdefault(
+                url_info.normalized_url,
+                url_info,
+            )
+
+        return list(
+            merged.values()
         )
 
     # ========================================================
@@ -729,6 +782,7 @@ class CrawlEngine:
                 output,
                 (str, Path),
             ):
+
                 output_path = str(
                     output
                 )

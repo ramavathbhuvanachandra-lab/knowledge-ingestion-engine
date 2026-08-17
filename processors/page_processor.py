@@ -1,4 +1,3 @@
-from processors.knowledge_organizer import KnowledgeOrganizer
 from processors.filename_generator import FilenameGenerator
 from storage.saver import save_page
 from utils import get_domain
@@ -6,15 +5,25 @@ from utils import get_domain
 
 class PageProcessor:
     """
-    Converts crawled PageData into organized knowledge files.
+    Converts crawled PageData into raw knowledge files.
+
+    This processor is responsible only for saving freshly
+    crawled webpage content.
+
+    Semantic organization is handled later by the knowledge
+    organization pipeline. The crawler therefore does not
+    make site-specific assumptions about categories.
     """
+
+    RAW_PAGE_CATEGORY = "pages"
 
     def __init__(
         self,
         base_path="storage/output",
     ):
-        self.organizer = KnowledgeOrganizer()
-        self.filename_generator = FilenameGenerator()
+        self.filename_generator = (
+            FilenameGenerator()
+        )
         self.base_path = base_path
 
     def process(self, page):
@@ -26,12 +35,6 @@ class PageProcessor:
             page.url
         )
 
-        category, _ = (
-            self.organizer.get_save_location(
-                page
-            )
-        )
-
         filename = (
             self.filename_generator.generate(
                 page
@@ -41,7 +44,7 @@ class PageProcessor:
         return save_page(
             page=page,
             domain=domain,
-            category=category,
+            category=self.RAW_PAGE_CATEGORY,
             filename=filename,
             base_path=self.base_path,
         )

@@ -1,27 +1,67 @@
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin, urlparse
 
+from crawler.url_normalizer import normalize_url
+from crawler.url_validator import is_valid_url
 
-def extract_internal_links(html: str, base_url: str):
 
-    soup = BeautifulSoup(html, "html.parser")
+def extract_internal_links(
+    html: str,
+    base_url: str,
+) -> list[str]:
 
-    links = set()
+    if not html or not base_url:
+        return []
 
-    base_domain = urlparse(base_url).netloc
+    soup = BeautifulSoup(
+        html,
+        "html.parser",
+    )
 
-    for tag in soup.find_all("a", href=True):
+    links: set[str] = set()
 
-        href = tag["href"]
+    base_domain = urlparse(
+        base_url
+    ).netloc.lower()
 
-        absolute_url = urljoin(base_url, href)
+    for tag in soup.find_all(
+        "a",
+        href=True,
+    ):
 
-        parsed = urlparse(absolute_url)
+        href = tag.get("href", "")
 
-        if parsed.netloc == base_domain:
+        if not isinstance(href, str):
+            continue
 
-            links.add(
-                parsed.scheme + "://" + parsed.netloc + parsed.path
-            )
+        href = href.strip()
+
+        if not href:
+            continue
+
+        absolute_url = urljoin(
+            base_url,
+            href,
+        )
+
+        normalized_url = normalize_url(
+            absolute_url
+        )
+
+        if not is_valid_url(
+            normalized_url
+        ):
+            continue
+
+        parsed = urlparse(
+            normalized_url
+        )
+
+        if parsed.netloc.lower() != base_domain:
+            continue
+
+        links.add(
+            normalized_url
+        )
 
     return sorted(links)

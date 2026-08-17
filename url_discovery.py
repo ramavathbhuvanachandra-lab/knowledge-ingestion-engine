@@ -1,13 +1,29 @@
 from urllib.parse import urljoin, urlparse
 
-from crawler.url_normalizer import normalize_url
-from crawler.url_validator import is_valid_url
-from crawler.url_classifier import classify_url
-from models.navigation import NavigationCandidate, NavigationNode
+from crawler.link_extractor import (
+    extract_internal_links,
+)
+from crawler.url_normalizer import (
+    normalize_url,
+)
+from crawler.url_validator import (
+    is_valid_url,
+)
+from crawler.url_classifier import (
+    classify_url,
+)
+from models.navigation import (
+    NavigationCandidate,
+    NavigationNode,
+)
 from models.url import URLInfo
 
 
 class URLDiscovery:
+
+    # ==================================================
+    # NAVIGATION TREE DISCOVERY
+    # ==================================================
 
     def discover(
         self,
@@ -18,7 +34,9 @@ class URLDiscovery:
         discovered: list[URLInfo] = []
         seen: set[str] = set()
 
-        base_domain = urlparse(source_url).netloc
+        base_domain = urlparse(
+            source_url
+        ).netloc
 
         for candidate in candidates:
 
@@ -34,6 +52,69 @@ class URLDiscovery:
 
         return discovered
 
+    # ==================================================
+    # GENERIC HTML LINK DISCOVERY
+    # ==================================================
+
+    def discover_html_links(
+        self,
+        html: str,
+        source_url: str,
+    ) -> list[URLInfo]:
+
+        discovered: list[URLInfo] = []
+        seen: set[str] = set()
+
+        if not html or not source_url:
+            return discovered
+
+        base_domain = urlparse(
+            source_url
+        ).netloc
+
+        links = extract_internal_links(
+            html=html,
+            base_url=source_url,
+        )
+
+        for url in links:
+
+            normalized_url = normalize_url(
+                url
+            )
+
+            if not normalized_url:
+                continue
+
+            if normalized_url in seen:
+                continue
+
+            if not is_valid_url(
+                normalized_url
+            ):
+                continue
+
+            url_info = classify_url(
+                raw_url=url,
+                normalized_url=normalized_url,
+                base_domain=base_domain,
+                discovered_from=source_url,
+            )
+
+            discovered.append(
+                url_info
+            )
+
+            seen.add(
+                normalized_url
+            )
+
+        return discovered
+
+    # ==================================================
+    # COLLECT NAVIGATION NODE
+    # ==================================================
+
     def _collect_node(
         self,
         node: NavigationNode,
@@ -43,7 +124,14 @@ class URLDiscovery:
         seen: set[str],
     ) -> None:
 
-        raw_href = node.href.strip()
+        raw_href = (
+            node.href.strip()
+            if isinstance(
+                node.href,
+                str,
+            )
+            else ""
+        )
 
         if raw_href:
 
@@ -68,7 +156,9 @@ class URLDiscovery:
                     absolute_url,
                 )
 
-                if is_valid_url(normalized):
+                if is_valid_url(
+                    normalized
+                ):
 
                     url_info = classify_url(
                         raw_url=raw_href,
