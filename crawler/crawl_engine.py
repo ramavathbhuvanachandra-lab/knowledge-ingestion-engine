@@ -682,8 +682,12 @@ class CrawlEngine:
         """
         Crawl and process one webpage.
 
-        A page failure is raised to the crawl loop, where it
-        is recorded and the next queued item continues.
+        If the fetcher follows a redirect, the final URL becomes
+        the canonical crawl identity before link discovery.
+
+        The requested URL is removed from the queue lifecycle and
+        replaced by the final URL so inventory, depth tracking, and
+        queue identity remain consistent.
         """
 
         print(
@@ -711,45 +715,200 @@ class CrawlEngine:
             "======================================"
         )
 
+        requested_url = (
+            self._normalize_tracking_key(
+                plan.url
+            )
+        )
+
         self._set_url_status(
-            plan.url,
+            requested_url,
             "processing",
         )
 
         page = await crawl_page(
-            plan.url
+            requested_url
         )
 
         if not page.success:
 
             raise RuntimeError(
                 f"Page crawl failed: "
-                f"{plan.url}"
+                f"{requested_url}"
             )
 
         if not page.html:
 
             raise RuntimeError(
                 f"Empty HTML returned: "
-                f"{plan.url}"
+                f"{requested_url}"
             )
 
-        # ----------------------------------------------------
+        final_url = (
+            self._normalize_tracking_key(
+                page.url
+            )
+        )
+
+        if not final_url:
+
+            raise RuntimeError(
+                f"Fetcher returned an empty final URL: "
+                f"{requested_url}"
+            )
+
+        # --------------------------------------------------------
+        # REDIRECT IDENTITY RECONCILIATION
+        # --------------------------------------------------------
+
+        if final_url != requested_url:
+
+            print(
+                "[REDIRECT]",
+                requested_url,
+                "->",
+                final_url,
+            )
+
+            requested_record = (
+                self.url_inventory.pop(
+                    requested_url,
+                    None,
+                )
+            )
+
+            final_record = (
+                self.url_inventory.get(
+                    final_url
+                )
+            )
+
+            if final_record is None:
+
+                if requested_record is None:
+
+                    final_record = {
+                        "url": final_url,
+                        "normalized_url": final_url,
+                        "url_type": URLType.WEBPAGE.value,
+                        "action": CrawlAction.CRAWL.value,
+                        "priority": plan.priority.name,
+                        "depth": plan.depth,
+                        "discovered_from": [],
+                        "status": "processing",
+                        "error": None,
+                        "output": None,
+                    }
+
+                else:
+
+                    final_record = requested_record
+
+                    final_record[
+                        "url"
+                    ] = final_url
+
+                    final_record[
+                        "normalized_url"
+                    ] = final_url
+
+                self.url_inventory[
+                    final_url
+                ] = final_record
+
+            if requested_record is not None:
+
+                requested_sources = requested_record.get(
+                    "discovered_from",
+                    [],
+                )
+
+                final_sources = final_record.get(
+                    "discovered_from",
+                    [],
+                )
+
+                if not isinstance(
+                    final_sources,
+                    list,
+                ):
+                    final_sources = []
+
+                for source in requested_sources:
+
+                    if (
+                        source
+                        and source not in final_sources
+                    ):
+                        final_sources.append(source)
+
+                final_record[
+                    "discovered_from"
+                ] = final_sources
+
+            final_record[
+                "redirected"
+            ] = True
+
+            final_record[
+                "redirected_from"
+            ] = requested_url
+
+            requested_depth = (
+                self.depth_tracker.get_depth(
+                    requested_url
+                )
+            )
+
+            if requested_depth is None:
+                requested_depth = plan.depth
+
+            self.depth_tracker._depths.pop(
+                requested_url,
+                None,
+            )
+
+            existing_final_depth = (
+                self.depth_tracker.get_depth(
+                    final_url
+                )
+            )
+
+            if existing_final_depth is None:
+
+                self.depth_tracker._depths[
+                    final_url
+                ] = requested_depth
+
+            # CrawlQueue currently exposes no public identity-replacement
+            # operation. Its _seen set is the crawl-lifecycle identity
+            # used by this engine, so move the identity directly here.
+            if requested_url in self.queue._seen:
+
+                self.queue._seen.remove(
+                    requested_url
+                )
+
+            self.queue._seen.add(
+                final_url
+            )
+
+        # --------------------------------------------------------
         # PAGE PROCESSING
-        # ----------------------------------------------------
+        # --------------------------------------------------------
 
         output = self.processor.process(
             page
         )
 
-        # ----------------------------------------------------
+        # --------------------------------------------------------
         # DISCOVER NEXT URLs
-        # ----------------------------------------------------
+        # --------------------------------------------------------
 
         discovered_urls = (
             self._discover_navigation(
                 html=page.html,
-                source_url=page.url,
+                source_url=final_url,
             )
         )
 
@@ -764,15 +923,13 @@ class CrawlEngine:
         )
 
         self._create_and_enqueue_plans(
-            discovered_urls=(
-                discovered_urls
-            ),
-            source_url=page.url,
+            discovered_urls=discovered_urls,
+            source_url=final_url,
         )
 
-        # ----------------------------------------------------
+        # --------------------------------------------------------
         # SUCCESS
-        # ----------------------------------------------------
+        # --------------------------------------------------------
 
         output_path = None
 
@@ -788,7 +945,7 @@ class CrawlEngine:
                 )
 
         self._set_url_status(
-            plan.url,
+            final_url,
             "success",
             output=output_path,
         )

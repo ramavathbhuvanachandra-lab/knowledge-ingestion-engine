@@ -262,9 +262,15 @@ def _normalize_crawl4ai_result(
         url=(
             getattr(
                 result,
+                "redirected_url",
+                None,
+            )
+            or getattr(
+                result,
                 "url",
                 None,
             )
+
             or url
         ),
         title=metadata.get(
@@ -504,6 +510,20 @@ async def _crawl_with_strategy(
                 url=url,
                 config=config,
             )
+            print(
+                "[REDIRECT DEBUG] result.url:",
+                getattr(result, "url", None),
+            )
+            print(
+                "[REDIRECT DEBUG] result.redirected_url:",
+                getattr(result, "redirected_url", None),
+            )
+            print(
+                "[REDIRECT DEBUG] result.status_code:",
+                getattr(result, "status_code", None),
+            )
+
+
 
         candidate = (
             _normalize_crawl4ai_result(

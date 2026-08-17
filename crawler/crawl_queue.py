@@ -1,6 +1,9 @@
 from collections import deque
 
-from models.crawl_plan import CrawlPlan, CrawlPriority
+from models.crawl_plan import (
+    CrawlPlan,
+    CrawlPriority,
+)
 
 
 class CrawlQueue:
@@ -10,6 +13,7 @@ class CrawlQueue:
     Guarantees:
     - HIGH priority before NORMAL.
     - NORMAL priority before LOW.
+    - LOW priority last.
     - FIFO ordering within the same priority.
     - A URL can enter the crawl lifecycle only once.
     - A URL remains marked as seen after dequeue().
@@ -26,14 +30,11 @@ class CrawlQueue:
 
     def mark_seen(self, url: str) -> bool:
         """
-        Mark a URL as already seen.
-
-        This is primarily used for the root URL because the root
-        is crawled directly rather than being placed in the queue.
+        Mark a URL as already seen without enqueueing it.
 
         Returns:
             True  -> newly marked
-            False -> already seen
+            False -> already seen / invalid
         """
 
         if not url:
@@ -46,13 +47,46 @@ class CrawlQueue:
 
         return True
 
-    def enqueue(self, plan: CrawlPlan) -> bool:
+    def replace_seen(
+        self,
+        old_url: str,
+        new_url: str,
+    ) -> bool:
+        """
+        Replace one crawl-lifecycle identity with another.
+
+        This is used for redirects:
+
+            /old  ->  /new
+
+        The lifecycle remains a single URL identity.
+        """
+
+        if not old_url or not new_url:
+            return False
+
+        if old_url == new_url:
+            return False
+
+        if old_url not in self._seen:
+            return False
+
+        self._seen.remove(old_url)
+
+        self._seen.add(new_url)
+
+        return True
+
+    def enqueue(
+        self,
+        plan: CrawlPlan,
+    ) -> bool:
         """
         Add a plan to the queue.
 
         Returns:
             True  -> plan added
-            False -> URL already seen
+            False -> URL already seen / invalid
         """
 
         url = plan.url
@@ -63,7 +97,10 @@ class CrawlQueue:
         if url in self._seen:
             return False
 
-        self._queues[plan.priority].append(plan)
+        self._queues[
+            plan.priority
+        ].append(plan)
+
         self._seen.add(url)
 
         return True
@@ -107,7 +144,7 @@ class CrawlQueue:
         """
         Return True if the URL has entered the crawl lifecycle.
 
-        This remains True after the URL is dequeued.
+        This remains True after dequeue().
         """
 
         if not url:
