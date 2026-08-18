@@ -19,7 +19,7 @@ class PageProcessor:
 
     def __init__(
         self,
-        base_path="storage/output",
+        base_path="storage/01_crawled",
     ):
         self.filename_generator = (
             FilenameGenerator()

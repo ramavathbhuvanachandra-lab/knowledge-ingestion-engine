@@ -1,3 +1,24 @@
+"""
+Command 2 — Knowledge Cleaning Engine.
+
+Purpose:
+    Convert one Markdown + metadata pair into clean, human-readable
+    knowledge while preserving substantive content and provenance.
+
+Important invariants:
+    - Never modify the original input files.
+    - Remove obvious website/UI/extraction noise only.
+    - Preserve headings, paragraphs, lists, tables, and meaningful links.
+    - Preserve unknown substantive content.
+    - Preserve source URL/source provenance.
+    - Never classify final semantic organization here.
+    - Never chunk or embed content.
+
+Output:
+    The caller controls the output domain/category so this cleaner can
+    be reused by the new Command 2 orchestration layer.
+"""
+
 from pathlib import Path
 import json
 import re
@@ -6,56 +27,56 @@ from urllib.parse import urlparse
 
 class KnowledgeCleaner:
     """
-    PHASE 7.3 — KNOWLEDGE CLEANING
+    Clean one Markdown knowledge document.
 
-    Purpose:
-        Convert crawler-produced Markdown into clean,
-        human-verifiable, RAG-ready knowledge Markdown.
+    The cleaner owns content cleaning.
 
-    Design principles:
-        - Remove obvious website/UI noise.
-        - Preserve page-specific knowledge.
-        - Preserve headings.
-        - Preserve paragraphs.
-        - Preserve lists.
-        - Preserve tables.
-        - Preserve meaningful links.
-        - Never aggressively delete unknown content.
-        - Never chunk.
-        - Never embed.
-        - Never modify crawler output.
-
-    Input:
-        storage/output/<domain>/<category>/<file>.md
-        storage/output/<domain>/<category>/<file>.json
-
-    Output:
-        storage/knowledge/<domain>/<category>/<file>.md
-        storage/knowledge/<domain>/<category>/<file>.json
+    The caller owns:
+        - input discovery
+        - source-type selection
+        - batch orchestration
+        - failure aggregation
+        - final command manifests
     """
 
-    # --------------------------------------------------------
-    # CONSTRUCTOR
-    # --------------------------------------------------------
+    CLEANING_VERSION = "8.0"
 
     def __init__(
         self,
-        output_path: str | Path = "storage/knowledge",
+        output_path: str | Path = "storage/02_cleaned",
     ):
-        self.output_path = Path(output_path)
+        self.output_path = Path(
+            output_path
+        )
 
-    # --------------------------------------------------------
+    # ========================================================
     # PUBLIC API
-    # --------------------------------------------------------
+    # ========================================================
 
     def clean(
         self,
         markdown_path: str | Path,
         metadata_path: str | Path,
+        output_domain: str | None = None,
+        output_category: str | None = None,
     ) -> tuple[Path, Path]:
+        """
+        Clean one Markdown + metadata pair.
 
-        markdown_path = Path(markdown_path)
-        metadata_path = Path(metadata_path)
+        Optional output_domain/output_category allow Command 2 to
+        explicitly control the new storage structure.
+
+        If they are not provided, the legacy metadata-based fallback
+        remains available for backward compatibility.
+        """
+
+        markdown_path = Path(
+            markdown_path
+        )
+
+        metadata_path = Path(
+            metadata_path
+        )
 
         # ----------------------------------------------------
         # VALIDATION
@@ -63,26 +84,30 @@ class KnowledgeCleaner:
 
         if not markdown_path.exists():
             raise FileNotFoundError(
-                f"Markdown file does not exist: {markdown_path}"
+                f"Markdown file does not exist: "
+                f"{markdown_path}"
             )
 
         if not metadata_path.exists():
             raise FileNotFoundError(
-                f"Metadata file does not exist: {metadata_path}"
+                f"Metadata file does not exist: "
+                f"{metadata_path}"
             )
 
         if not markdown_path.is_file():
             raise ValueError(
-                f"Markdown path is not a file: {markdown_path}"
+                f"Markdown path is not a file: "
+                f"{markdown_path}"
             )
 
         if not metadata_path.is_file():
             raise ValueError(
-                f"Metadata path is not a file: {metadata_path}"
+                f"Metadata path is not a file: "
+                f"{metadata_path}"
             )
 
         # ----------------------------------------------------
-        # READ
+        # READ INPUT
         # ----------------------------------------------------
 
         markdown = markdown_path.read_text(
@@ -95,8 +120,17 @@ class KnowledgeCleaner:
             )
         )
 
+        if not isinstance(
+            metadata,
+            dict,
+        ):
+            raise ValueError(
+                f"Metadata must be a JSON object: "
+                f"{metadata_path}"
+            )
+
         # ----------------------------------------------------
-        # CLEAN
+        # CLEAN MARKDOWN
         # ----------------------------------------------------
 
         cleaned = self._clean_markdown(
@@ -113,21 +147,19 @@ class KnowledgeCleaner:
         # OUTPUT LOCATION
         # ----------------------------------------------------
 
-        domain = metadata.get(
-            "storage_domain"
-        )
-
-        category = metadata.get(
-            "storage_category"
-        )
-
-        if not domain:
-            domain = self._domain_from_metadata(
+        domain = (
+            output_domain
+            or metadata.get("storage_domain")
+            or self._domain_from_metadata(
                 metadata
             )
+        )
 
-        if not category:
-            category = "others"
+        category = (
+            output_category
+            or metadata.get("storage_category")
+            or "others"
+        )
 
         domain = self._clean_component(
             domain
@@ -163,7 +195,7 @@ class KnowledgeCleaner:
         )
 
         # ----------------------------------------------------
-        # WRITE MARKDOWN
+        # WRITE CLEANED MARKDOWN
         # ----------------------------------------------------
 
         output_markdown.write_text(
@@ -175,12 +207,28 @@ class KnowledgeCleaner:
         # ENRICH METADATA
         # ----------------------------------------------------
 
-        metadata = dict(metadata)
+        metadata = dict(
+            metadata
+        )
+
+        source_url = (
+            metadata.get("url")
+            or metadata.get("source_url")
+        )
+
+        if source_url:
+            metadata["source_url"] = source_url
 
         metadata["knowledge_cleaned"] = True
-        metadata["cleaning_version"] = "7.3"
-        metadata["cleaned_content_length"] = len(cleaned)
-        metadata["original_content_length"] = len(markdown)
+        metadata["cleaning_version"] = (
+            self.CLEANING_VERSION
+        )
+        metadata["cleaned_content_length"] = (
+            len(cleaned)
+        )
+        metadata["original_content_length"] = (
+            len(markdown)
+        )
         metadata["cleaned_storage_path"] = str(
             output_markdown
         )
@@ -207,6 +255,12 @@ class KnowledgeCleaner:
         self,
         markdown: str,
     ) -> str:
+        """
+        Perform conservative Markdown cleaning.
+
+        This method removes obvious web machinery while preserving
+        substantive page-specific knowledge.
+        """
 
         text = markdown
 
@@ -306,8 +360,6 @@ class KnowledgeCleaner:
 
         # ----------------------------------------------------
         # 5. REMOVE COMMON UI-ONLY LINES
-        #
-        # These are safe because they do not contain knowledge.
         # ----------------------------------------------------
 
         ui_only_patterns = [
@@ -320,7 +372,7 @@ class KnowledgeCleaner:
             r"^Rate this translation$",
             r"^Do you like to give feedback$",
             r"^Search$",
-            r"^Menu$",
+            r"^(Main )?Menu$",
             r"^Close$",
         ]
 
@@ -360,12 +412,6 @@ class KnowledgeCleaner:
 
         # ----------------------------------------------------
         # 6. REMOVE GLOBAL WEBSITE CHROME
-        #
-        # Important:
-        # We only remove clearly identifiable global
-        # navigation/footer blocks.
-        #
-        # Unknown content is preserved.
         # ----------------------------------------------------
 
         lines = text.split("\n")
@@ -389,7 +435,7 @@ class KnowledgeCleaner:
         )
 
         # ----------------------------------------------------
-        # 8. REMOVE EMPTY LINK DUPLICATION
+        # 8. REMOVE EXACT DUPLICATED URL TOKENS
         # ----------------------------------------------------
 
         text = re.sub(
@@ -472,13 +518,12 @@ class KnowledgeCleaner:
         self,
         lines: list[str],
     ) -> list[str]:
-
         """
-        Remove the obvious global website header.
+        Remove obvious global website header content.
 
-        We stop removal once actual page content starts.
+        We stop when actual page content starts.
 
-        This is intentionally conservative.
+        Uncertain content is preserved.
         """
 
         if not lines:
@@ -517,8 +562,6 @@ class KnowledgeCleaner:
                 continue
 
             # Preserve uncertain content.
-            #
-            # We do NOT aggressively delete it.
             result.append(line)
 
         return result
@@ -537,7 +580,10 @@ class KnowledgeCleaner:
 
         lower = line.lower()
 
-        # Language selector
+        # ----------------------------------------------------
+        # Generic language-selector signal
+        # ----------------------------------------------------
+
         languages = [
             "english",
             "assamese",
@@ -572,7 +618,10 @@ class KnowledgeCleaner:
         if language_hits >= 3:
             return True
 
+        # ----------------------------------------------------
         # Common global navigation
+        # ----------------------------------------------------
+
         navigation_words = [
             "[ home ]",
             "[ sitemap ]",
@@ -582,7 +631,10 @@ class KnowledgeCleaner:
         if lower in navigation_words:
             return True
 
+        # ----------------------------------------------------
         # Accessibility remnants
+        # ----------------------------------------------------
+
         if "accessibility" in lower:
             return True
 
@@ -611,8 +663,6 @@ class KnowledgeCleaner:
             return True
 
         # Strong page-specific sentence.
-        #
-        # Avoid using this too aggressively.
         if len(line) > 150:
             return True
 
@@ -669,7 +719,7 @@ class KnowledgeCleaner:
             )
 
             # A line containing many languages is almost
-            # certainly the global language selector.
+            # certainly a global language selector.
             if hits >= 4:
                 continue
 
@@ -685,24 +735,16 @@ class KnowledgeCleaner:
         self,
         lines: list[str],
     ) -> list[str]:
-
         """
-        Remove the common global footer once a strong footer
-        marker is encountered.
+        Remove the common global footer.
 
-        This intentionally removes everything AFTER the
-        global footer marker because that region is normally
-        site-wide navigation, social links, copyright and
-        government/portal logos.
-
-        Page-specific content occurring before this marker
-        remains untouched.
+        This remains conservative: only a footer marker that is
+        very clearly acting as a global footer should terminate
+        the page content.
         """
 
         footer_markers = [
-            "important links",
             "copyright ©",
-            "copyright",
             "for any comments/enquiries/feedback",
             "web information manager",
         ]
@@ -718,7 +760,9 @@ class KnowledgeCleaner:
 
             for marker in footer_markers:
 
-                if marker in lower:
+                if lower == marker or lower.startswith(
+                    marker
+                ):
                     cutoff = index
                     break
 
@@ -728,7 +772,6 @@ class KnowledgeCleaner:
         if cutoff is None:
             return lines
 
-        # Keep content before footer.
         return lines[:cutoff]
 
     # ========================================================
@@ -746,13 +789,12 @@ class KnowledgeCleaner:
             or ""
         )
 
-        match = re.search(
-            r"https?://([^/]+)",
-            source_url,
+        parsed = urlparse(
+            source_url
         )
 
-        if match:
-            return match.group(1)
+        if parsed.netloc:
+            return parsed.netloc
 
         return "unknown"
 

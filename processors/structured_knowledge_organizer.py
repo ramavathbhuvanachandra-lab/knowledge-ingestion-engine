@@ -68,6 +68,7 @@ from processors.knowledge_context_rules import (
 
 
 from processors.knowledge_content_triage import KnowledgeContentTriage
+from processors.knowledge_record_segmenter import KnowledgeRecordSegmenter
 
 
 class StructuredKnowledgeOrganizer:
@@ -146,6 +147,7 @@ class StructuredKnowledgeOrganizer:
     # ==================================================================
 
         self.rag_triage = KnowledgeContentTriage()
+        self.record_segmenter = KnowledgeRecordSegmenter()
 
 
     def organize_document(
@@ -153,7 +155,9 @@ class StructuredKnowledgeOrganizer:
         json_path: str | Path,
     ) -> dict:
 
-        json_path = Path(json_path)
+        json_path = Path(
+            json_path
+        )
 
         if not json_path.exists():
             raise FileNotFoundError(
@@ -284,7 +288,6 @@ class StructuredKnowledgeOrganizer:
                 # IMPORTANT:
                 #
                 # Update hierarchy BEFORE filtering the section.
-                #
                 # Therefore an empty parent such as:
                 #
                 #   About
@@ -318,10 +321,8 @@ class StructuredKnowledgeOrganizer:
                 # ------------------------------------------------------
                 # Meaningful content with no explicit heading.
                 #
-                # Do NOT delete it.
-                #
-                # Give it a deterministic structural heading while
-                # preserving original_heading=None.
+                # Do NOT delete it. Give it a deterministic structural
+                # heading while preserving original_heading=None.
                 # ------------------------------------------------------
 
                 if not heading or not str(
@@ -333,182 +334,227 @@ class StructuredKnowledgeOrganizer:
                         document_title=title,
                     )
 
-                classification = (
-                    classify_with_context(
-                        heading=heading,
-                        text=text,
-                        source_name=(
-                            json_path.name
-                            + "\n"
-                            + original_category
-                        ),
-                        document_title=title,
-                        document_url=url,
-                    )
-                )
-
                 # ------------------------------------------------------
-                # STUDENT RAG ELIGIBILITY
+                # RECORD SEGMENTATION
                 #
-                # This does NOT delete or modify source knowledge.
-                # It only determines whether the unit belongs in the
-                # final student-support RAG candidate.
+                # Normal narrative sections remain one record. Strong
+                # repeated-record sections are split deterministically.
+                # Nothing is discarded or rewritten.
                 # ------------------------------------------------------
 
-                rag_classification = (
-                    self.rag_triage.classify(
-                        {
-                            "heading": heading,
-                            "text": text,
-                            "section_path": section_path,
-                            "document_title": title,
-                            "source_document_name": (
-                                json_path.name
-                            ),
-                            "source_url": url,
-                            "original_category": (
-                                original_category
-                            ),
-                            "topic": (
-                                classification["domain"]
-                            ),
-                            "subtopic": (
-                                classification["category"]
-                            ),
-                        }
-                    )
+                records = self.record_segmenter.segment(
+                    text=text,
+                    start_line=1,
                 )
 
-                unit = {
-                    # --------------------------------------------------
-                    # IDENTITY
-                    # --------------------------------------------------
+                for record in records:
 
-                    "unit_id": (
-                        self._make_unit_id(
-                            json_path,
-                            page_index,
-                            section_index,
+                    record_text = (
+                        record["text"]
+                        or ""
+                    ).strip()
+
+                    if not record_text:
+                        continue
+
+                    record_index = record.get(
+                        "record_index"
+                    )
+
+                    record_segmented = bool(
+                        record.get(
+                            "segmented",
+                            False,
                         )
-                    ),
+                    )
 
-                    "source_document": str(
-                        json_path
-                    ),
-
-                    "source_document_name": (
-                        json_path.name
-                    ),
-
-                    "source_url": url,
-
-                    "document_title": title,
-
-                    "domain": source_domain,
-
-                    "original_category": (
-                        original_category
-                    ),
-
-                    "document_type": document_type,
-
-                    # --------------------------------------------------
-                    # ORIGINAL STRUCTURE
-                    # --------------------------------------------------
-
-                    "page_index": page_index,
-
-                    "page_number": page_number,
-
-                    "section_index": section_index,
-
-                    "heading": heading,
-
-                    "original_heading": (
-                        original_heading
-                    ),
-
-                    "level": level,
-
-                    "section_path": (
-                        section_path
-                    ),
-
-                    "content_type": (
-                        content_type
-                    ),
-
-                    "text": text,
-
-                    "decision": decision,
-
-                    # --------------------------------------------------
-                    # 8.4 CONTRACT
-                    # --------------------------------------------------
-
-                    "topic": (
-                        classification["domain"]
-                    ),
-
-                    "subtopic": (
-                        classification["category"]
-                    ),
-
-                    # --------------------------------------------------
-                    # EXTENDED TAXONOMY
-                    # --------------------------------------------------
-
-                    "taxonomy_domain": (
-                        classification[
-                            "domain"
-                        ]
-                    ),
-
-                    "taxonomy_category": (
-                        classification[
-                            "category"
-                        ]
-                    ),
-
-                    "taxonomy_subcategory": (
-                        classification[
-                            "subcategory"
-                        ]
-                    ),
-
-                    "classification_confidence": (
-                        classification[
-                            "confidence"
-                        ]
-                    ),
-
-                    "classification_score": (
-                        classification[
-                            "score"
-                        ]
-                    ),
+                    classification = (
+                        classify_with_context(
+                            heading=heading,
+                            text=record_text,
+                            source_name=(
+                                json_path.name
+                                + "\n"
+                                + original_category
+                            ),
+                            document_title=title,
+                            document_url=url,
+                        )
+                    )
 
                     # --------------------------------------------------
                     # STUDENT RAG ELIGIBILITY
+                    #
+                    # This does NOT delete or modify source knowledge.
+                    # It only determines whether the unit belongs in the
+                    # final student-support RAG candidate.
                     # --------------------------------------------------
 
-                    "rag": (
-                        rag_classification[
-                            "rag"
-                        ]
-                    ),
-                }
+                    rag_classification = (
+                        self.rag_triage.classify(
+                            {
+                                "heading": heading,
+                                "text": record_text,
+                                "section_path": section_path,
+                                "document_title": title,
+                                "source_document_name": (
+                                    json_path.name
+                                ),
+                                "source_url": url,
+                                "original_category": (
+                                    original_category
+                                ),
+                                "topic": (
+                                    classification["domain"]
+                                ),
+                                "subtopic": (
+                                    classification["category"]
+                                ),
+                            }
+                        )
+                    )
 
-                units.append(unit)
+                    unit = {
+                        # --------------------------------------------------
+                        # IDENTITY
+                        # --------------------------------------------------
+
+                        "unit_id": (
+                            self._make_unit_id(
+                                json_path,
+                                page_index,
+                                section_index,
+                                record_index=record_index,
+                                record_start_line=record.get(
+                                    "start_line"
+                                ),
+                            )
+                        ),
+
+                        "source_document": str(
+                            json_path
+                        ),
+
+                        "source_document_name": (
+                            json_path.name
+                        ),
+
+                        "source_url": url,
+
+                        "document_title": title,
+
+                        "domain": source_domain,
+
+                        "original_category": (
+                            original_category
+                        ),
+
+                        "document_type": document_type,
+
+                        # --------------------------------------------------
+                        # ORIGINAL STRUCTURE
+                        # --------------------------------------------------
+
+                        "page_index": page_index,
+
+                        "page_number": page_number,
+
+                        "section_index": section_index,
+
+                        "heading": heading,
+
+                        "original_heading": (
+                            original_heading
+                        ),
+
+                        "level": level,
+
+                        "section_path": (
+                            section_path
+                        ),
+
+                        "content_type": (
+                            content_type
+                        ),
+
+                        "text": record_text,
+
+                        "decision": decision,
+
+                        # --------------------------------------------------
+                        # RECORD PROVENANCE
+                        # --------------------------------------------------
+                        #
+                        # These fields are added only for the new record
+                        # segmentation layer. For an unsplit section they
+                        # remain None/False, preserving the old semantics.
+                        # --------------------------------------------------
+
+                        "record_index": record_index,
+
+                        "record_start_line": record.get(
+                            "start_line"
+                        ),
+
+                        "record_end_line": record.get(
+                            "end_line"
+                        ),
+
+                        "record_segmented": record_segmented,
+
+                        # --------------------------------------------------
+                        # 8.4 CONTRACT
+                        # --------------------------------------------------
+
+                        "topic": (
+                            classification["domain"]
+                        ),
+
+                        "subtopic": (
+                            classification["category"]
+                        ),
+
+                        # --------------------------------------------------
+                        # EXTENDED TAXONOMY
+                        # --------------------------------------------------
+
+                        "taxonomy_domain": (
+                            classification["domain"]
+                        ),
+
+                        "taxonomy_category": (
+                            classification["category"]
+                        ),
+
+                        "taxonomy_subcategory": (
+                            classification["subcategory"]
+                        ),
+
+                        "classification_confidence": (
+                            classification["confidence"]
+                        ),
+
+                        "classification_score": (
+                            classification["score"]
+                        ),
+
+                        # --------------------------------------------------
+                        # STUDENT RAG ELIGIBILITY
+                        # --------------------------------------------------
+
+                        "rag": (
+                            rag_classification["rag"]
+                        ),
+                    }
+
+                    units.append(unit)
 
         review_count = sum(
             1
             for unit in units
             if (
                 unit["decision"] == "REVIEW"
-                or unit[
-                    "taxonomy_domain"
-                ] == "review"
+                or unit["taxonomy_domain"] == "review"
             )
         )
 
@@ -1360,13 +1406,28 @@ class StructuredKnowledgeOrganizer:
         path: Path,
         page_index: int,
         section_index: int,
+        record_index: int | None = None,
+        record_start_line: int | None = None,
     ) -> str:
+        """
+        Generate a deterministic unit ID.
+
+        Legacy unsplit sections keep their historical identity inputs.
+        Segmented records add record identity so multiple records from
+        one section cannot collide.
+        """
 
         raw = (
             f"{path.resolve()}::"
             f"{page_index}::"
             f"{section_index}"
         )
+
+        if record_index is not None:
+            raw += f"::record::{record_index}"
+
+        if record_start_line is not None:
+            raw += f"::line::{record_start_line}"
 
         return hashlib.sha1(
             raw.encode(
