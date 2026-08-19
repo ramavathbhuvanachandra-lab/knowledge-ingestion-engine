@@ -342,3 +342,94 @@ def run_cleaning(
     )
 
     return manifest
+
+
+# ============================================================
+# COMMAND-LINE ENTRY POINT
+# ============================================================
+
+if __name__ == "__main__":
+
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description=(
+            "Clean crawled and processed knowledge "
+            "for one website domain."
+        )
+    )
+
+    parser.add_argument(
+        "domain",
+        help="Website domain, e.g. gwpgc.ac.in",
+    )
+
+    parser.add_argument(
+        "--crawled-root",
+        default="storage/01_crawled",
+    )
+
+    parser.add_argument(
+        "--processed-documents-root",
+        default="storage/processed_documents",
+    )
+
+    parser.add_argument(
+        "--output-root",
+        default="storage/02_cleaned",
+    )
+
+    args = parser.parse_args()
+
+    result = run_cleaning(
+        domain=args.domain,
+        crawled_root=args.crawled_root,
+        processed_documents_root=(
+            args.processed_documents_root
+        ),
+        output_root=args.output_root,
+    )
+
+    print()
+    print("=" * 80)
+    print("COMMAND 2 — CLEAN KNOWLEDGE")
+    print("=" * 80)
+
+    print(
+        "Domain              :",
+        result["domain"],
+    )
+
+    print(
+        "Input webpages      :",
+        result["input_webpages"],
+    )
+
+    print(
+        "Input documents     :",
+        result["input_documents"],
+    )
+
+    print(
+        "Total inputs        :",
+        result["total_inputs"],
+    )
+
+    print(
+        "Cleaned successfully:",
+        result["cleaned_successfully"],
+    )
+
+    print(
+        "Failed              :",
+        result["failed"],
+    )
+
+    print()
+    print(
+        "Output:",
+        args.output_root,
+        args.domain,
+    )
+
+    print("=" * 80)
