@@ -1,41 +1,53 @@
+# ============================================================
+# Generated pipeline data
+# ============================================================
+
+/storage/
+/storage_v2/
+
+# ============================================================
 # Python
+# ============================================================
+
 __pycache__/
-*.pyc
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
 
-# Virtual Environment
+# ============================================================
+# Virtual environments
+# ============================================================
+
 4a1/
+.venv/
 venv/
+env/
 
+# ============================================================
+# Environment / secrets
+# ============================================================
+
+.env
+
+# ============================================================
 # macOS
+# ============================================================
+
 .DS_Store
 
-# VS Code
+# ============================================================
+# IDE
+# ============================================================
+
 .vscode/
+.idea/
 
-# Logs
+# ============================================================
+# Logs / generated output
+# ============================================================
+
 logs/
-
-# Output
 output/
-
-# Environment
-.env
-storage/test_real_output/
-storage/output/
-__pycache__/
-*.pyc
-
-
-# Generated knowledge pipeline artifacts
-storage/structured_knowledge/
-storage/organized_knowledge*/
-storage/rag_knowledge/
-storage/pipeline_reports/
-
-# Python cache
-__pycache__/
-*.pyc
-
-# Local test/generated artifacts
 test_documents/
 test_output/
